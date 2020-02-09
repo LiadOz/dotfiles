@@ -2,3 +2,6 @@ before installation:
 sudo apt-get update
 sudo apt-get yadm
 yadm clone this repository
+
+wsltty congig file should be place as:
+username/AppData/Roaming/wsltty/config
