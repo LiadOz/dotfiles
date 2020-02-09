@@ -1,0 +1,200 @@
+filetype off
+set encoding=utf-8
+scriptencoding utf-8
+
+call plug#begin('~/.vim/plugged')
+Plug 'scrooloose/nerdtree'
+Plug 'itchyny/lightline.vim'
+Plug 'junegunn/seoul256.vim'
+Plug 'tpope/vim-fugitive'
+Plug 'airblade/vim-gitgutter'
+Plug 'tpope/vim-sensible'
+Plug 'tpope/vim-surround'
+Plug 'python-mode/python-mode', { 'for': 'python', 'branch': 'develop' }
+Plug 'GrzegorzKozub/vimdows'
+Plug 'lifepillar/vim-mucomplete'
+Plug 'christoomey/vim-tmux-navigator'
+Plug 'https://github.com/junegunn/fzf.vim'
+Plug '/home/linuxbrew/.linuxbrew/opt/fzf'
+Plug 'https://github.com/dracula/vim'
+Plug 'https://github.com/rafi/awesome-vim-colorschemes'
+
+Plug 'lambdalisue/battery.vim'
+" r plugins
+Plug 'jalvesaq/Nvim-R'
+call plug#end()
+
+filetype plugin indent on
+syntax on
+set tabstop=4
+set autowrite
+set shiftwidth=4
+set expandtab
+colo focuspoint
+
+"Autocomplete settings
+inoremap <C-Space> <C-x><C-o>
+inoremap <C-@> <C-Space>
+set completeopt+=menuone
+set completeopt+=noselect
+set shortmess+=c   " Shut off completion messages
+set belloff+=ctrlg " If Vim beeps during completion
+let g:mucomplete#enable_auto_at_startup = 1
+
+" needed for vimdows
+let &viminfo = &viminfo . ',!'
+try | rviminfo | catch | endtry
+let g:vimdows_mappings = 0
+map <F11> :call vimdows#full_screen_toggle()<CR>
+map <F12> :call vimdows#maximized_toggle()<CR>
+
+:inoremap jk <Esc>
+:inoremap kj <Esc>
+:set number relativenumber
+let g:NERDTreeChDirMode = 2 "Making the chosen directory become the cwd VERY IMPORTANT!!!!
+let g:NERDTreeIgnore=['\.o$']
+:set guioptions-=m  "remove menu bar
+:set guioptions-=T  "remove toolbar
+:set guioptions-=r  "remove right-hand scroll bar
+:set guioptions-=L  "remove left-hand scroll bar
+":colo base16-oceanicnext "other good candidates from base16: flat, google-dark, harmonic-dark
+set updatetime=100 " vims update time influences GitGutter
+set noshowmode " made redundent by lightline
+
+" set statusline=%t                                       " tail of the filename
+" set statusline+=\ %h                                    " help file flag
+" set statusline+=%m                                      " modified flag
+" set statusline+=%r                                      " read only flag
+" set statusline+=%y                                      " filetype
+" set statusline+=%{FugitiveStatusline()}			" git status
+" set statusline+=%=                                      " left/right separator
+" set statusline+=\ [%{strlen(&fenc)?&fenc:'none'},       " file encoding
+" set statusline+=%{&ff}]\                                " file format
+" set statusline+=%c\                                     " cursor column
+" set statusline+=\/%-4{strwidth(getline('.'))}         	" line length
+" set statusline+=%l/%L\                                  " cursor line/total lines
+" set statusline+=(%p%%)                                  " percentage through the file
+" set statusline+=\ %{strftime(\"%H:%M\")}                " time
+
+set laststatus=2
+
+let g:battery#update_statusline = 1 " For statusline.
+let g:battery#component_format = "%v%% %g"
+let g:lightline = {
+	\ 'component': {
+	\   'lineinfo': ' %3l:%-2v',
+	\ },
+	\ 'component_function': {
+	\   'readonly': 'LightlineReadonly',
+	\   'fugitive': 'LightlineFugitive'
+	\ },
+	\ 'separator': { 'left': '' },
+	\ 'subseparator': { 'left': '' },
+	\ 'colorscheme': 'default',
+	\ 'active': {
+	\   'left': [ [ 'mode', 'paste' ],
+	\             [ 'fugitive', 'readonly', 'filename', 'modified' ] ],
+    \   'right':[[ 'percent' ],
+    \             [ 'filetype', 'fileencoding' ]]
+	\ }
+	\ }
+"unused separator 'right': '' 'right': ''
+function! LightlineReadonly()
+	return &readonly ? '' : ''
+endfunction
+function! LightlineFugitive()
+	if exists('*fugitive#head')
+		let branch = fugitive#head()
+		return branch !=# '' ? ' '.branch : ''
+	endif
+	return ''
+endfunction
+function! CurrentTime()
+    return strftime('%H:%M')
+endfunction
+
+let s:palette = g:lightline#colorscheme#{g:lightline.colorscheme}#palette
+let s:palette.normal.middle = [ [ 'NONE', 'NONE', 'NONE', 'NONE' ] ]
+let s:palette.inactive.middle = s:palette.normal.middle
+let s:palette.tabline.middle = s:palette.normal.middle
+
+
+" need to install fonts help here https://medium.com/@slmeng/how-to-install-powerline-fonts-in-windows-b2eedecace58
+
+map <F6> :NERDTreeToggle<CR>
+" Exit NERDTree if it is the last window
+autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
+map <F9> :w !python %<CR>
+map <F10> :!python -i %<CR>
+autocmd VimEnter * :GitGutterEnable
+autocmd GUIEnter * silent! WToggleClean " Fixes screen size dll made with cmake wimproved1 module
+"autocmd VimEnter * NERDTree
+au GUIEnter * simalt ~x "start maximized
+
+"leg g:ascii= [
+"            \ ' ..|''||   |'''''||   ..|''||   '|.   '|' |'''''||   ..|''||   '|.   '|'  ..|''||  ',
+"            \ '.|'    ||      .|'   .|'    ||   |'|   |      .|'   .|'    ||   |'|   |  .|'    || ',
+"            \ '||      ||    ||     ||      ||  | '|. |     ||     ||      ||  | '|. |  ||      ||',
+"            \ ''|.     ||  .|'      '|.     ||  |   |||   .|'      '|.     ||  |   |||  '|.     ||',
+"            \ ' ''|...|'  ||......|  ''|...|'  .|.   '|  ||......|  ''|...|'  .|.   '|   ''|...|' ',
+"            \ ]
+"
+
+
+
+
+"let g:startify_custom_header =
+"      \ 'startify#pad(g:ascii + startify#fortune#boxed())'
+
+  let s:background = "#1d1f21"
+  let s:foreground = "#c5c8c6"
+
+"pymode
+let g:pymode = 1
+let g:pymode_paths = []
+let g:pymode_trim_whitespaces = 1
+let g:pymode_options = 1
+let g:pymode_options_max_line_length = 79
+let g:pymode_options_colorcolumn = 1
+let g:pymode_quickfix_minheight = 3
+let g:pymode_quickfix_maxheight = 6
+let g:pymode_preview_height = &previewheight
+let g:pymode_preview_position = 'botright'
+let g:pymode_python = 'python3'
+let g:pymode_indent = 1
+let g:pymode_folding = 0
+let g:pymode_motion = 1
+let g:pymode_doc = 1
+let g:pymode_doc_bind = 'K'
+let g:pymode_virtualenv = 1
+let g:pymode_run = 1
+let g:pymode_run_bind = '<leader>r'
+let g:pymode_breakpoint = 1
+let g:pymode_breakpoint_bind = '<leader>b'
+let g:pymode_lint = 1
+let g:pymode_lint_on_write = 1
+let g:pymode_lint_message = 1
+let g:pymode_lint_checkers = ['pyflakes', 'pep8', 'mccabe']
+let g:pymode_rope = 1
+let g:pymode_rope_lookup_project = 0
+set completeopt=menuone,noinsert
+let g:pymode_rope_completion = 1
+let g:pymode_rope_complete_on_dot = 1
+let g:pymode_rope_completion_bind = '<C-Space>'
+"skippped 4.3 just cause
+let g:pymode_syntax = 1
+let g:pymode_syntax_all = 1
+let g:pymode_syntax_print_as_function = 0
+let g:pymode_syntax_highlight_equal_operator = g:pymode_syntax_all
+let g:pymode_syntax_highlight_stars_operator = g:pymode_syntax_all
+let g:pymode_syntax_highlight_self = g:pymode_syntax_all
+let g:pymode_syntax_indent_errors = g:pymode_syntax_all
+let g:pymode_syntax_space_errors = g:pymode_syntax_all
+let g:pymode_syntax_string_formatting = g:pymode_syntax_all
+let g:pymode_syntax_string_format = g:pymode_syntax_all
+let g:pymode_syntax_string_templates = g:pymode_syntax_all
+let g:pymode_syntax_builtin_objs = g:pymode_syntax_all
+let g:pymode_syntax_builtin_types = g:pymode_syntax_all
+let g:pymode_syntax_highlight_exceptions = g:pymode_syntax_all
+let g:pymode_syntax_docstrings = g:pymode_syntax_all
+let g:pymode_syntax_doctests = g:pymode_syntax_all

@@ -1,0 +1,5 @@
+"Vim config" 
+
+Notes:
+* Pymode can give errors if installed through plug on windows, it can be solved by downloading again using
+git clone --recurse-submodules https://github.com/python-mode/python-mode -c core.symlinks=true
