@@ -11,15 +11,12 @@ Plug 'airblade/vim-gitgutter'
 Plug 'tpope/vim-sensible'
 Plug 'tpope/vim-surround'
 Plug 'python-mode/python-mode', { 'for': 'python', 'branch': 'develop' }
-Plug 'GrzegorzKozub/vimdows'
 Plug 'lifepillar/vim-mucomplete'
 Plug 'christoomey/vim-tmux-navigator'
-Plug 'https://github.com/junegunn/fzf.vim'
-Plug '/home/linuxbrew/.linuxbrew/opt/fzf'
 Plug 'https://github.com/dracula/vim'
 Plug 'https://github.com/rafi/awesome-vim-colorschemes'
+Plug 'her/central.vim'
 
-Plug 'lambdalisue/battery.vim'
 " r plugins
 Plug 'jalvesaq/Nvim-R'
 call plug#end()
@@ -32,6 +29,12 @@ set shiftwidth=4
 set expandtab
 colo focuspoint
 
+" File backups
+set backupdir=$HOME/.vbackup/backup//
+set directory=$HOME/.vbackup/swap//
+set undodir=$HOME/.vbackup/undo//
+set backup swapfile undofile
+
 "Autocomplete settings
 inoremap <C-Space> <C-x><C-o>
 inoremap <C-@> <C-Space>
@@ -41,15 +44,10 @@ set shortmess+=c   " Shut off completion messages
 set belloff+=ctrlg " If Vim beeps during completion
 let g:mucomplete#enable_auto_at_startup = 1
 
-" needed for vimdows
-let &viminfo = &viminfo . ',!'
-try | rviminfo | catch | endtry
-let g:vimdows_mappings = 0
-map <F11> :call vimdows#full_screen_toggle()<CR>
-map <F12> :call vimdows#maximized_toggle()<CR>
-
 :inoremap jk <Esc>
 :inoremap kj <Esc>
+:inoremap JK <Esc>
+:inoremap KJ <Esc>
 :set number relativenumber
 let g:NERDTreeChDirMode = 2 "Making the chosen directory become the cwd VERY IMPORTANT!!!!
 let g:NERDTreeIgnore=['\.o$']
@@ -78,8 +76,6 @@ set noshowmode " made redundent by lightline
 
 set laststatus=2
 
-let g:battery#update_statusline = 1 " For statusline.
-let g:battery#component_format = "%v%% %g"
 let g:lightline = {
 	\ 'component': {
 	\   'lineinfo': ' %3l:%-2v',
@@ -88,8 +84,8 @@ let g:lightline = {
 	\   'readonly': 'LightlineReadonly',
 	\   'fugitive': 'LightlineFugitive'
 	\ },
-	\ 'separator': { 'left': '' },
-	\ 'subseparator': { 'left': '' },
+	\ 'separator': { 'left': '' ,'right': ''},
+	\ 'subseparator': { 'left': '' ,'right': ''},
 	\ 'colorscheme': 'default',
 	\ 'active': {
 	\   'left': [ [ 'mode', 'paste' ],
