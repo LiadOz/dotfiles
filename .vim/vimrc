@@ -11,11 +11,11 @@ Plug 'airblade/vim-gitgutter'
 Plug 'tpope/vim-sensible'
 Plug 'tpope/vim-surround'
 Plug 'python-mode/python-mode', { 'for': 'python', 'branch': 'develop' }
-Plug 'lifepillar/vim-mucomplete'
 Plug 'christoomey/vim-tmux-navigator'
 Plug 'https://github.com/dracula/vim'
 Plug 'https://github.com/rafi/awesome-vim-colorschemes'
 Plug 'her/central.vim'
+Plug 'neoclide/coc.nvim', {'branch': 'release'}
 
 " r plugins
 Plug 'jalvesaq/Nvim-R'
@@ -42,7 +42,6 @@ set completeopt+=menuone
 set completeopt+=noselect
 set shortmess+=c   " Shut off completion messages
 set belloff+=ctrlg " If Vim beeps during completion
-let g:mucomplete#enable_auto_at_startup = 1
 
 :inoremap jk <Esc>
 :inoremap kj <Esc>

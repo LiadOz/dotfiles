@@ -71,7 +71,6 @@ ZSH_THEME="robbyrussell"
 # Add wisely, as too many plugins slow down shell startup.
 plugins=(
     git
-    fzf
     tmux
     vi-mode
 )
@@ -103,3 +102,8 @@ source $ZSH/oh-my-zsh.sh
 # Example aliases
 # alias zshconfig="mate ~/dotfiles/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
+echo " ..|''||   |'''''||   ..|''||   '|.   '|' |'''''||   ..|''||   '|.   '|'  ..|''||  "
+echo ".|'    ||      .|'   .|'    ||   |'|   |      .|'   .|'    ||   |'|   |  .|'    || "
+echo "||      ||    ||     ||      ||  | '|. |     ||     ||      ||  | '|. |  ||      ||"
+echo "'|.     ||  .|'      '|.     ||  |   |||   .|'      '|.     ||  |   |||  '|.     ||"
+echo " ''|...|'  ||......|  ''|...|'  .|.   '|  ||......|  ''|...|'  .|.   '|   ''|...|' "
