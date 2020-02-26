@@ -43,35 +43,17 @@ set completeopt+=noselect
 set shortmess+=c   " Shut off completion messages
 set belloff+=ctrlg " If Vim beeps during completion
 
-:inoremap jk <Esc>
-:inoremap kj <Esc>
-:inoremap JK <Esc>
-:inoremap KJ <Esc>
-:set number relativenumber
+set ignorecase
+inoremap jk <Esc>
+inoremap kj <Esc>
+inoremap JK <Esc>
+inoremap KJ <Esc>
+set number relativenumber
 let g:NERDTreeChDirMode = 2 "Making the chosen directory become the cwd VERY IMPORTANT!!!!
 let g:NERDTreeIgnore=['\.o$']
-:set guioptions-=m  "remove menu bar
-:set guioptions-=T  "remove toolbar
-:set guioptions-=r  "remove right-hand scroll bar
-:set guioptions-=L  "remove left-hand scroll bar
 ":colo base16-oceanicnext "other good candidates from base16: flat, google-dark, harmonic-dark
 set updatetime=100 " vims update time influences GitGutter
 set noshowmode " made redundent by lightline
-
-" set statusline=%t                                       " tail of the filename
-" set statusline+=\ %h                                    " help file flag
-" set statusline+=%m                                      " modified flag
-" set statusline+=%r                                      " read only flag
-" set statusline+=%y                                      " filetype
-" set statusline+=%{FugitiveStatusline()}			" git status
-" set statusline+=%=                                      " left/right separator
-" set statusline+=\ [%{strlen(&fenc)?&fenc:'none'},       " file encoding
-" set statusline+=%{&ff}]\                                " file format
-" set statusline+=%c\                                     " cursor column
-" set statusline+=\/%-4{strwidth(getline('.'))}         	" line length
-" set statusline+=%l/%L\                                  " cursor line/total lines
-" set statusline+=(%p%%)                                  " percentage through the file
-" set statusline+=\ %{strftime(\"%H:%M\")}                " time
 
 set laststatus=2
 
@@ -83,17 +65,24 @@ let g:lightline = {
 	\   'readonly': 'LightlineReadonly',
 	\   'fugitive': 'LightlineFugitive'
 	\ },
-	\ 'separator': { 'left': '' ,'right': ''},
-	\ 'subseparator': { 'left': '' ,'right': ''},
 	\ 'colorscheme': 'default',
 	\ 'active': {
-	\   'left': [ [ 'mode', 'paste' ],
-	\             [ 'fugitive', 'readonly', 'filename', 'modified' ] ],
-    \   'right':[[ 'percent' ],
-    \             [ 'filetype', 'fileencoding' ]]
-	\ }
-	\ }
-"unused separator 'right': '' 'right': ''
+	\   'left': [ [ 'mode', 'paste' ], [ 'fugitive', 'readonly', 'filename', 'modified' ], [ 'statuslinetabs' ]],
+	\ },
+    \ 'component_expand': {
+    \   'statuslinetabs': 'LightlineStatuslineTabs',
+    \ },
+    \ }
+"separator 'right': '' 'right': ''
+" 'separator': { 'left': '' ,'right': ''},
+" 'subseparator': { 'left': '' ,'right': ''},
+
+" Setting tabs in lightline
+set showtabline=0
+function! LightlineStatuslineTabs() abort
+  return join(map(range(1, tabpagenr('$')),
+        \ '(v:val == tabpagenr() ? "[*] " : "") . lightline#tab#filename(v:val)'), " | ")
+endfunction"
 function! LightlineReadonly()
 	return &readonly ? '' : ''
 endfunction
@@ -104,15 +93,11 @@ function! LightlineFugitive()
 	endif
 	return ''
 endfunction
-function! CurrentTime()
-    return strftime('%H:%M')
-endfunction
 
 let s:palette = g:lightline#colorscheme#{g:lightline.colorscheme}#palette
 let s:palette.normal.middle = [ [ 'NONE', 'NONE', 'NONE', 'NONE' ] ]
 let s:palette.inactive.middle = s:palette.normal.middle
 let s:palette.tabline.middle = s:palette.normal.middle
-
 
 " need to install fonts help here https://medium.com/@slmeng/how-to-install-powerline-fonts-in-windows-b2eedecace58
 
@@ -126,23 +111,6 @@ autocmd GUIEnter * silent! WToggleClean " Fixes screen size dll made with cmake 
 "autocmd VimEnter * NERDTree
 au GUIEnter * simalt ~x "start maximized
 
-"leg g:ascii= [
-"            \ ' ..|''||   |'''''||   ..|''||   '|.   '|' |'''''||   ..|''||   '|.   '|'  ..|''||  ',
-"            \ '.|'    ||      .|'   .|'    ||   |'|   |      .|'   .|'    ||   |'|   |  .|'    || ',
-"            \ '||      ||    ||     ||      ||  | '|. |     ||     ||      ||  | '|. |  ||      ||',
-"            \ ''|.     ||  .|'      '|.     ||  |   |||   .|'      '|.     ||  |   |||  '|.     ||',
-"            \ ' ''|...|'  ||......|  ''|...|'  .|.   '|  ||......|  ''|...|'  .|.   '|   ''|...|' ',
-"            \ ]
-"
-
-
-
-
-"let g:startify_custom_header =
-"      \ 'startify#pad(g:ascii + startify#fortune#boxed())'
-
-  let s:background = "#1d1f21"
-  let s:foreground = "#c5c8c6"
 
 "pymode
 let g:pymode = 1
