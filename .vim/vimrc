@@ -15,11 +15,15 @@ Plug 'christoomey/vim-tmux-navigator'
 Plug 'https://github.com/dracula/vim'
 Plug 'https://github.com/rafi/awesome-vim-colorschemes'
 Plug 'her/central.vim'
-Plug 'neoclide/coc.nvim', {'branch': 'release'}
 
+Plug 'Shougo/deoplete.nvim'
+Plug 'roxma/nvim-yarp'
+Plug 'roxma/vim-hug-neovim-rpc'
+Plug 'Shougo/deoplete-clangx'
 " r plugins
 Plug 'jalvesaq/Nvim-R'
 call plug#end()
+let g:deoplete#enable_at_startup = 1
 
 filetype plugin indent on
 syntax on
@@ -34,14 +38,6 @@ set backupdir=$HOME/.vbackup/backup//
 set directory=$HOME/.vbackup/swap//
 set undodir=$HOME/.vbackup/undo//
 set backup swapfile undofile
-
-"Autocomplete settings
-inoremap <C-Space> <C-x><C-o>
-inoremap <C-@> <C-Space>
-set completeopt+=menuone
-set completeopt+=noselect
-set shortmess+=c   " Shut off completion messages
-set belloff+=ctrlg " If Vim beeps during completion
 
 set ignorecase
 inoremap jk <Esc>
