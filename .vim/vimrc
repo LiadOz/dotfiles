@@ -20,6 +20,8 @@ Plug 'Shougo/deoplete.nvim'
 Plug 'roxma/nvim-yarp'
 Plug 'roxma/vim-hug-neovim-rpc'
 Plug 'Shougo/deoplete-clangx'
+Plug 'vim-syntastic/syntastic'
+Plug 'octol/vim-cpp-enhanced-highlight'
 " r plugins
 Plug 'jalvesaq/Nvim-R'
 call plug#end()
@@ -33,11 +35,25 @@ set shiftwidth=4
 set expandtab
 colo focuspoint
 
+" syntastic settings
+" ================================================
+set statusline+=%#warningmsg#
+set statusline+=%{SyntasticStatuslineFlag()}
+set statusline+=%*
+
+let g:syntastic_always_populate_loc_list = 1
+let g:syntastic_auto_loc_list = 1
+let g:syntastic_check_on_open = 1
+let g:syntastic_check_on_wq = 0
+" ================================================
+
 " File backups
+" ================================================
 set backupdir=$HOME/.vbackup/backup//
 set directory=$HOME/.vbackup/swap//
 set undodir=$HOME/.vbackup/undo//
 set backup swapfile undofile
+" ================================================
 
 set ignorecase
 inoremap jk <Esc>
