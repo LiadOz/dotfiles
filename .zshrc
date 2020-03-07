@@ -71,6 +71,7 @@ ZSH_THEME="robbyrussell"
 # Add wisely, as too many plugins slow down shell startup.
 plugins=(
     git
+    fzf
     tmux
     vi-mode
 )
@@ -107,3 +108,5 @@ echo ".|'    ||      .|'   .|'    ||   |'|   |      .|'   .|'    ||   |'|   |  .
 echo "||      ||    ||     ||      ||  | '|. |     ||     ||      ||  | '|. |  ||      ||"
 echo "'|.     ||  .|'      '|.     ||  |   |||   .|'      '|.     ||  |   |||  '|.     ||"
 echo " ''|...|'  ||......|  ''|...|'  .|.   '|  ||......|  ''|...|'  .|.   '|   ''|...|' "
+
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
