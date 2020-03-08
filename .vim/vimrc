@@ -15,20 +15,26 @@ Plug 'christoomey/vim-tmux-navigator'
 Plug 'https://github.com/dracula/vim'
 Plug 'https://github.com/rafi/awesome-vim-colorschemes'
 Plug 'her/central.vim'
-Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 
-Plug 'Shougo/deoplete.nvim'
-Plug 'roxma/nvim-yarp'
-Plug 'roxma/vim-hug-neovim-rpc'
-Plug 'Shougo/deoplete-clangx'
+if version >= 800
+    Plug 'Shougo/deoplete.nvim'
+    Plug 'roxma/nvim-yarp'
+    Plug 'roxma/vim-hug-neovim-rpc'
+    Plug 'Shougo/deoplete-clangx'
+endif
 Plug 'vim-syntastic/syntastic'
 Plug 'octol/vim-cpp-enhanced-highlight'
-Plug 'SirVer/ultisnips'
-Plug 'honza/vim-snippets'
+if has('python3')
+    Plug 'SirVer/ultisnips'
+    Plug 'honza/vim-snippets'
+endif
 " r plugins
 Plug 'jalvesaq/Nvim-R'
 call plug#end()
-let g:deoplete#enable_at_startup = 1
+
+if version >= 800
+    let g:deoplete#enable_at_startup = 1
+endif
 
 filetype plugin indent on
 syntax on
@@ -43,11 +49,13 @@ colo focuspoint
 " ================================================
 
 " Trigger configuration. Do not use <tab> if you use https://github.com/Valloric/YouCompleteMe.
-let g:UltiSnipsExpandTrigger="<tab>"
-let g:UltiSnipsJumpForwardTrigger="<c-b>"
-let g:UltiSnipsJumpBackwardTrigger="<c-z>"
-" If you want :UltiSnipsEdit to split your window.
-let g:UltiSnipsEditSplit="vertical"
+if has('python3')
+    let g:UltiSnipsExpandTrigger="<tab>"
+    let g:UltiSnipsJumpForwardTrigger="<c-b>"
+    let g:UltiSnipsJumpBackwardTrigger="<c-z>"
+    " If you want :UltiSnipsEdit to split your window.
+    let g:UltiSnipsEditSplit="vertical"
+endif
 
 " ================================================
 
