@@ -15,6 +15,7 @@ Plug 'christoomey/vim-tmux-navigator'
 Plug 'https://github.com/dracula/vim'
 Plug 'https://github.com/rafi/awesome-vim-colorschemes'
 Plug 'her/central.vim'
+Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 
 if version >= 800
     Plug 'Shougo/deoplete.nvim'
@@ -80,10 +81,6 @@ set backup swapfile undofile
 " ================================================
 
 set ignorecase
-inoremap jk <Esc>
-inoremap kj <Esc>
-inoremap JK <Esc>
-inoremap KJ <Esc>
 set number relativenumber
 let g:NERDTreeChDirMode = 2 "Making the chosen directory become the cwd VERY IMPORTANT!!!!
 let g:NERDTreeIgnore=['\.o$']
