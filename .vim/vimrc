@@ -29,12 +29,14 @@ if has('python3')
     Plug 'SirVer/ultisnips'
     Plug 'honza/vim-snippets'
 endif
+Plug 'christianfosli/wsl-copy'
 " r plugins
 Plug 'jalvesaq/Nvim-R'
 call plug#end()
 
 if version >= 800
     let g:deoplete#enable_at_startup = 1
+    autocmd InsertLeave * if pumvisible() == 0 | pclose | endif "close deoplete after completion
 endif
 
 filetype plugin indent on
@@ -137,13 +139,16 @@ let s:palette.tabline.middle = s:palette.normal.middle
 map <F6> :NERDTreeToggle<CR>
 " Exit NERDTree if it is the last window
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
-map <F9> :w !python %<CR>
-map <F10> :!python -i %<CR>
+autocmd FileType py map <F9> :w !python %<CR>
+autocmd FileType cpp map <F9> :w<CR> :!g++ -g -std=c++14 -Wall -Werror %; ./a.out<CR>
+autocmd FileType cpp map <F10> :w<CR> :!g++ -g -std=c++14 -Wall -Werror %<CR>
+autocmd FileType cpp map <F11> :w<CR> :!g++ -g -std=c++14 -Wall -Werror %; ./a.out < test<CR>
+autocmd FileType py map <F10> :!python -i %<CR>
 autocmd VimEnter * :GitGutterEnable
 autocmd GUIEnter * silent! WToggleClean " Fixes screen size dll made with cmake wimproved1 module
+
 "autocmd VimEnter * NERDTree
 au GUIEnter * simalt ~x "start maximized
-
 
 "pymode
 "let g:pymode = 1

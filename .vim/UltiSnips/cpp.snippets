@@ -1,0 +1,103 @@
+snippet cmpb "Base for competition" b
+#include <iostream>
+#include <cmath>
+#include <vector>
+#include <unordered_map>
+#include <unordered_set>
+#include <tuple>
+#include <string>
+#include <cstring>
+#include <algorithm>
+typedef long long ll;
+using namespace std;
+
+int main() {
+	ios_base::sync_with_stdio(0);
+	cin.tie(0);
+	cout.tie(0);
+
+	$1
+}
+endsnippet
+
+snippet cmp2v "Competition Question" b
+int ${1:t}, ${2:n}, ${3:k};
+cin >> $1;
+while ($1--) {
+	cin >> $2 >> $3;
+	$4
+}
+endsnippet
+
+snippet cmpin "Competition input"
+int ${1:T};
+cin >> $1;
+for (int ${2:t} = 0; $2 < $1; ++$2){
+	$4
+}
+endsnippet
+
+snippet inp "Get input"
+${1:int} ${2:num};
+cin >> $2;
+$3
+endsnippet
+
+snippet printmat "Print Matrix" b
+for (int row = 0; row < ${1:n}; ++i) {
+	for (int col = 0; col < $1; ++j) {
+		cout << ${2:a}[row][col] << " ";
+	} 
+	cout << endl;
+}
+$3
+endsnippet
+
+snippet print2v "Print vector of vectors" b
+for (auto& v: ${1:vv}) {
+	for (auto& element : v) {
+		cout << element << " ";
+	} 
+	cout << endl;
+}
+$3
+endsnippet
+
+snippet dfs "Simple dfs traversal" b
+vector<vector<int>> g; vector<bool> visible;
+void dfs(int cur){
+	visible[cur] = true;
+	for(int s : g[cur]){
+		if(visible[s]) continue;
+		dfs(s);
+	}
+}
+endsnippet
+
+snippet bfs "simple bfs traversal" b
+vector<vector<int>> g; vector<bool> visible;
+void bfs(vector<int>& starts){
+	for (auto i : starts) {
+		visible[i] = true;
+	}
+	vector<int> cur_level = starts;
+	int dist = 0;
+	while(!cur_level.empty()){
+		vector<int> next_level;
+		for (int f : cur_level){
+			// iterate through sons
+			for (int s : g[f]){
+				if (visible[s]) continue;
+				visible[s] = true;
+				next_level.push_back(s);
+			}
+		}
+		cur_level = next_level;
+		dist++;
+	}
+}
+endsnippet
+
+snippet printjam "Standrad print for code jam" b
+cout << "Case #" << ${1:t} << ": " << ${2:result} << endl;
+endsnippet
