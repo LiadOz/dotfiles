@@ -1,3 +1,13 @@
+snippet obph "Define ostream overload" b
+ostream& operator<<(ostream& out, const ${1:object}& ${2:o});
+endsnippet
+
+snippet obpc "Implement ostream overload" b
+ostream& operator<<(ostream& out, const ${1:object}& ${2:o}){
+	return out << $3;
+}
+endsnippet
+	
 snippet cmpb "Base for competition" b
 #include <iostream>
 #include <cmath>
@@ -8,6 +18,7 @@ snippet cmpb "Base for competition" b
 #include <string>
 #include <cstring>
 #include <algorithm>
+#include <queue>
 typedef long long ll;
 using namespace std;
 
@@ -100,4 +111,75 @@ endsnippet
 
 snippet printjam "Standrad print for code jam" b
 cout << "Case #" << ${1:t} << ": " << ${2:result} << endl;
+endsnippet
+
+snippet dick "dijkstra algorithm" b
+const int INF = 1e9 + 19;
+
+int n, m;
+#define SUM ll
+using pp = pair<SUM, int>; // the type of distance is the first one
+vector<vector<pair<int, SUM>>> g; // the graph
+vector<int> p; // node parent in dijkstra
+vector<SUM> d;
+
+// dijkstra copmlexity ElogV
+void dijkstra(int s) {
+	d.assign(n+10, INF);
+	p.assign(n+10, -1);
+
+	d[s] = 0;
+	priority_queue<pp, vector<pp>, greater<pp>> q;
+	q.push({0, s});
+	while (!q.empty()) {
+		int v = q.top().second;
+		auto d_v = q.top().first;
+		q.pop();
+		if (d_v != d[v])
+			continue;
+
+		for (auto edge : g[v]) {
+			int to = edge.first;
+			auto len = edge.second;
+
+			if (d[v] + len < d[to]) {
+				d[to] = d[v] + len;
+				p[to] = v;
+				q.push({d[to], to});
+			}
+		}
+	}
+}
+
+vector<int> get_path(int from, int to){
+	vector<int> final_path;
+	for (int i = to; i != from; i = p[i]) 
+		final_path.push_back(i);
+	final_path.push_back(from);
+	reverse(final_path.begin(), final_path.end());
+	return final_path;
+}
+endsnippet
+	
+snippet top_sort "topological sort" b
+vector<vector<int>> g; vector<bool> visible;
+vector<int> sorted;
+void dfs(int cur){
+	visible[cur] = true;
+	for(int s : g[cur]){
+		if(visible[s]) continue;
+		dfs(s);
+	}
+	sorted.push_back(cur);
+}
+
+void top_sort(int n){
+	visible.assign(n, false);
+	sorted.clear();
+	for (int i = 0; i < n; ++i) {
+		if(visible[i]) continue;
+		dfs(i);
+	}
+	reverse(sorted.begin(), sorted.end());
+}
 endsnippet

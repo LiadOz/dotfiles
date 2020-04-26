@@ -54,7 +54,7 @@ colo focuspoint
 " Trigger configuration. Do not use <tab> if you use https://github.com/Valloric/YouCompleteMe.
 if has('python3')
     let g:UltiSnipsExpandTrigger="<tab>"
-    let g:UltiSnipsJumpForwardTrigger="<c-b>"
+    let g:UltiSnipsJumpForwardTrigger="<c-v>"
     let g:UltiSnipsJumpBackwardTrigger="<c-z>"
     " If you want :UltiSnipsEdit to split your window.
     let g:UltiSnipsEditSplit="vertical"
@@ -67,11 +67,19 @@ endif
 "set statusline+=%#warningmsg#
 "set statusline+=%{SyntasticStatuslineFlag()}
 "set statusline+=%*
-
+"
+let g:syntastic_cpp_check_header = 1
 let g:syntastic_always_populate_loc_list = 1
 let g:syntastic_auto_loc_list = 1
 let g:syntastic_check_on_open = 1
 let g:syntastic_check_on_wq = 0
+" ================================================
+
+" vim-cpp-enhanced-highlight settings 
+" ================================================
+let g:cpp_class_scope_highlight = 1
+let g:cpp_member_variable_highlight = 1
+let g:cpp_class_decl_highlight = 1
 " ================================================
 
 " File backups
@@ -143,6 +151,7 @@ autocmd FileType py map <F9> :w !python %<CR>
 autocmd FileType cpp map <F9> :w<CR> :!g++ -g -std=c++14 -Wall -Werror %; ./a.out<CR>
 autocmd FileType cpp map <F10> :w<CR> :!g++ -g -std=c++14 -Wall -Werror %<CR>
 autocmd FileType cpp map <F11> :w<CR> :!g++ -g -std=c++14 -Wall -Werror %; ./a.out < test<CR>
+autocmd FileType cpp map <leader>c :w<CR> :!make && ./ex1<CR>
 autocmd FileType py map <F10> :!python -i %<CR>
 autocmd VimEnter * :GitGutterEnable
 autocmd GUIEnter * silent! WToggleClean " Fixes screen size dll made with cmake wimproved1 module
@@ -199,3 +208,6 @@ au GUIEnter * simalt ~x "start maximized
 "let g:pymode_syntax_highlight_exceptions = g:pymode_syntax_all
 "let g:pymode_syntax_docstrings = g:pymode_syntax_all
 "let g:pymode_syntax_doctests = g:pymode_syntax_all
+
+" j new
+nnoremap <leader>a "=strftime("%c")<CR>P
