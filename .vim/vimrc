@@ -73,6 +73,8 @@ let g:syntastic_always_populate_loc_list = 1
 let g:syntastic_auto_loc_list = 1
 let g:syntastic_check_on_open = 1
 let g:syntastic_check_on_wq = 0
+let g:syntastic_cpp_compiler = 'clang++'   
+let g:syntastic_cpp_compiler_options='-Wno-pragma-once-outside-header -lstdc++fs -std=c++2a' 
 " ================================================
 
 " vim-cpp-enhanced-highlight settings 
@@ -148,9 +150,9 @@ map <F6> :NERDTreeToggle<CR>
 " Exit NERDTree if it is the last window
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
 autocmd FileType py map <F9> :w !python %<CR>
-autocmd FileType cpp map <F9> :w<CR> :!g++ -g -std=c++14 -Wall -Werror %; ./a.out<CR>
-autocmd FileType cpp map <F10> :w<CR> :!g++ -g -std=c++14 -Wall -Werror %<CR>
-autocmd FileType cpp map <F11> :w<CR> :!g++ -g -std=c++14 -Wall -Werror %; ./a.out < test<CR>
+autocmd FileType cpp map <F9> :w<CR> :!g++ -ggdb3 -std=c++14 -Wall -Werror %; ./a.out<CR>
+autocmd FileType cpp map <F10> :w<CR> :!g++ -ggdb3 -std=c++14 -Wall -Werror %<CR>
+autocmd FileType cpp map <F11> :w<CR> :!g++ -ggdb3 -std=c++14 -Wall -Werror %; ./a.out < test<CR>
 autocmd FileType cpp map <leader>c :w<CR> :!make && ./ex1<CR>
 autocmd FileType py map <F10> :!python -i %<CR>
 autocmd VimEnter * :GitGutterEnable

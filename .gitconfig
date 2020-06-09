@@ -1,3 +1,8 @@
 [user]
 	name = Liad Oz
 	email = liadozil@gmail.com
+[credential]
+	helper = store
+[core]
+	whitespace = cr-at-eol
+	autocrlf = input

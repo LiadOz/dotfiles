@@ -183,3 +183,49 @@ void top_sort(int n){
 	reverse(sorted.begin(), sorted.end());
 }
 endsnippet
+
+snippet bellman "Bellman Ford" b
+const int INF = 1e9 + 19;
+
+vector<vector<pair<int, int>>> g;
+vector<int> d;
+vector<bool> loop;
+bool bellmanFord(int start){
+	d.assign(g.size()+1, INF);
+	d[start] = 0;
+	bool cycle;
+	for (size_t i = 0; i <= g.size()+1; ++i) {
+		cycle = false;
+		loop.assign(g.size() + 1, false);
+		for (size_t u = 0; u < g.size(); ++u) {
+			for (auto v : g[u]) {
+				if(d[u] != INF && d[v.first] > d[u] + v.second){
+					d[v.first]=d[u] + v.second;
+					loop[v.first]=true;
+					loop[u]=true;
+					cycle=true;
+				}
+			}
+		}
+	}
+	return cycle;
+}
+endsnippet
+
+snippet war "Floyd-Warshall" b
+const int INF = 1e9 + 19;
+vector<vector<int>> d; // in init d[i][j] = INF and d[i][i] = min(d[i][i], 0)
+void floyd_warshall(){
+	for (size_t k = 0; k < d.size(); ++k)
+		for (size_t i = 0; i < d.size(); ++i)
+			for (size_t j = 0; j < d.size(); ++j)
+				if(d[i][k] < INF && d[k][j] < INF)
+					d[i][j] = min(d[i][j], d[i][k]+d[k][j]);
+}
+int fw_distance_with_inf(int source, int target){
+	for (size_t k = 0; k < d.size(); ++k)
+		if(d[k][k] < 0 && d[source][k] < INF && d[k][target] < INF)
+			return -INF;
+	return d[source][target];
+}
+endsnippet
