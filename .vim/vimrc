@@ -152,7 +152,8 @@ autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isT
 autocmd FileType py map <F9> :w !python %<CR>
 autocmd FileType cpp map <F9> :w<CR> :!g++ -ggdb3 -std=c++14 -Wall -Werror %; ./a.out<CR>
 autocmd FileType cpp map <F10> :w<CR> :!g++ -ggdb3 -std=c++14 -Wall -Werror %<CR>
-autocmd FileType cpp map <F11> :w<CR> :!g++ -ggdb3 -std=c++14 -Wall -Werror %; ./a.out < test<CR>
+autocmd FileType cpp map <F11> :w<CR> :!g++ %; ./a.out < test<CR>
+" autocmd FileType cpp map <F11> :w<CR> :!g++ -ggdb3 -std=c++14 -Wall -Werror %; ./a.out < test<CR>
 autocmd FileType cpp map <leader>c :w<CR> :!make && ./ex1<CR>
 autocmd FileType py map <F10> :!python -i %<CR>
 autocmd VimEnter * :GitGutterEnable
