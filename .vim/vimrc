@@ -15,7 +15,6 @@ Plug 'christoomey/vim-tmux-navigator'
 Plug 'https://github.com/dracula/vim'
 Plug 'https://github.com/rafi/awesome-vim-colorschemes'
 Plug 'her/central.vim'
-Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 
 if version >= 800
     Plug 'Shougo/deoplete.nvim'

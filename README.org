@@ -1,0 +1,30 @@
+#+TITLE: DotFiles Config
+Configuration files for linux and WSL environment
+
+* Installation
+- update apt.
+- install yadm
+- clone this repository with yadm
+- open vim and type ":PlugInstall"
+- install python3-pip
+- with pip3 install pyvim
+- for c++ syntax instally clang
+* Other Packages Used
+- zsh and oh-my-zsh (after installing add "source .zsh_defaults.sh" in zshrc
+- gdb
+- fzf
+* WSL Troubleshooting
+** wsltty Config
+confing file should be place in:
+username/AppData/Roaming/wsltty/config
+
+** Allowing Windows Fonts
+follow
+https://x410.dev/cookbook/wsl/sharing-windows-fonts-with-wsl/
+make sure you find the exact place the font is saved at.
+fonts should be in ttf format.
+** Allow Emacs Links
+https://superuser.com/questions/1262977/open-browser-in-host-system-from-windows-subsystem-for-linux
+** Change Distribution
+to see distribution list type "wsl -l" in cmd
+to switch default use "wsl -s <distribution>"
