@@ -45,6 +45,7 @@ set autowrite
 set shiftwidth=4
 set expandtab
 colo focuspoint
+set colorcolumn=80
 
 
 " snippets
