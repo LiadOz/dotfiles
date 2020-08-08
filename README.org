@@ -1,6 +1,6 @@
 #+TITLE: DotFiles Config
-Configuration files for linux and WSL environment
-
+#+DESCRIPTION: Configuration files for linux and WSL environment
+ 
 * Installation
 - update apt.
 - install yadm
@@ -9,27 +9,35 @@ Configuration files for linux and WSL environment
 - install python3-pip
 - with pip3 install pyvim
 - for c++ syntax instally clang
+- install [[https://github.com/politza/pdf-tools#server-prerequisites][these packages]] for pdf-tools
 * Other Packages Used
-- zsh and oh-my-zsh (after installing add "source .zsh_defaults.sh" in zshrc
-- gdb
-- fzf
+** Shell
+   zsh and oh-my-zsh after installation add plugins git, fzf, tmux, vi-mode
+   and source .zsh\under{}defaults.sh.
+** other...
+   - gdb
+   - fzf
 * WSL Troubleshooting
 ** wsltty Config
-confing file should be place in:
-username/AppData/Roaming/wsltty/config
+   confing file should be place in:
+   username/AppData/Roaming/wsltty/config
 
 ** Allowing Windows Fonts
-follow
-https://x410.dev/cookbook/wsl/sharing-windows-fonts-with-wsl/
-make sure you find the exact place the font is saved at.
-fonts should be in ttf format.
+   follow [[https://x410.dev/cookbook/wsl/sharing-windows-fonts-with-wsl/][this]]
+   make sure you find the exact place the font is saved at.
+   fonts should be in ttf format.
 ** Allow Emacs Links
    follow this [[https://www.reddit.com/r/bashonubuntuonwindows/comments/70i8aa/making_emacs_on_wsl_open_links_in_windows_web/][comment]]
 ** Change Distribution
-   to see distribution list type "wsl -l" in cmd
-   to switch default use "wsl -s <distribution>"
+   to see distribution list 
+   #+BEGIN_SRC cmd
+   wsl -l
+   #+END_SRC
+   to switch default distribution 
+   #+BEGIN_SRC cmd
+   wsl -s <distribution>
+   #+END_SRC
 ** Packages not installing (signature failure)
    You need to temporarly set package-check-signature variable to nil then 
    install gnu-elpa-keyring-update.
    better possibilities in [[https://emacs.stackexchange.com/questions/233/how-to-proceed-on-package-el-signature-check-failure][here]].
-   
