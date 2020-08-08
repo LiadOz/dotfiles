@@ -24,7 +24,12 @@ https://x410.dev/cookbook/wsl/sharing-windows-fonts-with-wsl/
 make sure you find the exact place the font is saved at.
 fonts should be in ttf format.
 ** Allow Emacs Links
-https://superuser.com/questions/1262977/open-browser-in-host-system-from-windows-subsystem-for-linux
+   follow this [[https://www.reddit.com/r/bashonubuntuonwindows/comments/70i8aa/making_emacs_on_wsl_open_links_in_windows_web/][comment]]
 ** Change Distribution
-to see distribution list type "wsl -l" in cmd
-to switch default use "wsl -s <distribution>"
+   to see distribution list type "wsl -l" in cmd
+   to switch default use "wsl -s <distribution>"
+** Packages not installing (signature failure)
+   You need to temporarly set package-check-signature variable to nil then 
+   install gnu-elpa-keyring-update.
+   better possibilities in [[https://emacs.stackexchange.com/questions/233/how-to-proceed-on-package-el-signature-check-failure][here]].
+   
