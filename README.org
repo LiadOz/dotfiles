@@ -10,6 +10,9 @@
 - with pip3 install pyvim
 - for c++ syntax instally clang
 - install [[https://github.com/politza/pdf-tools#server-prerequisites][these packages]] for pdf-tools
+* Some Notes
+** Computer specific settings
+- create DROPBOX_DIR environment variable 
 * Other Packages Used
 ** Shell
    zsh and oh-my-zsh after installation add plugins git, fzf, tmux, vi-mode
@@ -40,4 +43,7 @@
 ** Packages not installing (signature failure)
    You need to temporarly set package-check-signature variable to nil then 
    install gnu-elpa-keyring-update.
-   better possibilities in [[https://emacs.stackexchange.com/questions/233/how-to-proceed-on-package-el-signature-check-failure][here]].
+   Even better try this:
+   #+BEGIN_SRC sh
+   gpg --keyserver hkp://keyserver.ubuntu.com:80 --homedir ~/.emacs.d/elpa/gnupg --receive-keys 066DAFCB81E42C40
+   #+END_SRC
