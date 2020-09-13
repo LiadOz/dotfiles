@@ -1,0 +1,161 @@
+#+TITLE: Emacs Configuration
+
+* Core
+** Startup Benchmark
+#+BEGIN_SRC emacs-lisp
+(use-package benchmark-init
+  :ensure t
+  :config
+  ;; To disable collection of benchmark data after init is done.
+  (add-hook 'after-init-hook 'benchmark-init/deactivate))
+
+(add-hook 'after-init-hook
+    (lambda () (message "loaded in %s" (emacs-init-time))))
+#+END_SRC
+** Evil Mode
+#+BEGIN_SRC emacs-lisp
+(use-package evil
+  :ensure t ;; install the evil package if not installed
+  :init ;; tweak evil's configuration before loading it
+  (setq evil-want-C-u-scroll t)
+  :config ;; tweak evil after loading it
+  (evil-mode)
+  (setq evil-emacs-state-modes nil)
+  (setq evil-insert-state-modes nil)
+  (setq evil-motion-state-modes nil))
+#+END_SRC
+** Auto Complete
+#+Begin_SRC emacs-lisp 
+(use-package auto-complete
+  :ensure t
+  :config
+  (ac-config-default))
+#+END_SRC
+** Helm
+A completion framework
+#+Begin_SRC emacs-lisp 
+(use-package helm
+  :ensure t
+  :config
+  (helm-mode 1))
+#+END_SRC
+** Helm Projectile
+Manage projects easily, [[tuhdo.github.io/helm-projectile.html][guide]].
+#+Begin_SRC emacs-lisp 
+(use-package helm-projectile :ensure t
+  :config
+  (projectile-global-mode)
+  (setq projectile-completion-system 'helm)
+  (helm-projectile-on))
+#+END_SRC
+** Relative Line Numbers
+Set line numbers to hybrid
+#+BEGIN_SRC emacs-lisp
+;;(add-hook 'conf-mode-hook #'display-line-numbers-mode)
+;;(add-hook 'prog-mode-hook #'display-line-numbers-mode)
+;;(add-hook 'text-mode-hook #'display-line-numbers-mode)
+;;(setq-default display-line-numbers-type 'relative)
+#+END_SRC
+** WSL Integeration
+#+BEGIN_SRC emacs-lisp
+(setq-default sysTypeSpecific  system-type) ;; get the system-type value
+(cond 
+ ;; If type is "gnu/linux", override to "wsl/linux" if it's WSL.
+ ((eq sysTypeSpecific 'gnu/linux)  
+  (when (string-match "Linux.*Microsoft.*Linux" 
+                      (shell-command-to-string "uname -a"))
+
+    (setq-default sysTypeSpecific "wsl/linux") ;; for later use.
+    (setq
+     cmdExeBin"/mnt/c/Windows/System32/cmd.exe"
+     cmdExeArgs '("/c" "start" "") )
+    (setq
+     browse-url-generic-program  cmdExeBin
+     browse-url-generic-args     cmdExeArgs
+     browse-url-browser-function 'browse-url-generic)
+    )))
+#+END_SRC
+** Other
+#+BEGIN_SRC emacs-lisp
+(use-package which-key
+  :ensure t
+  :config (which-key-mode))
+
+(use-package avy :ensure t)
+
+(use-package general :ensure t)
+#+END_SRC
+* Keybindings
+#+BEGIN_SRC emacs-lisp
+(general-define-key
+ :states '(normal visual insert emacs)
+ :prefix "SPC"
+ :non-normal-prefix "C-SPC"
+ "SPC"	'avy-goto-char-2
+  "b"		'switch-to-buffer
+  "f"		'helm-find-files
+  "p"		'(:ignore t :which-key "Projectile")
+  "pp"		'(helm-projectile-switch-project :wk "Switch Project")
+  "pf"		'(helm-projectile-find-file :wk "Find File")
+  "pF"		'(helm-projectile-find-file-in-known-projects
+    :wk "find In All Projects")
+  "pb"		'(helm-projectile-switch-to-buffer :wk "Switch Buffer")
+  "pe"		'(helm-projectile-recentf :wk "Recent Files")
+  "pg"		'(helm-projectile-grep :wk "grep Project")
+  "qq"		'eval-buffer)
+#+END_SRC
+* Misc Packages
+Enforcing 80 characters in line for all buffers
+#+BEGIN_SRC emacs-lisp 
+(use-package column-enforce-mode
+  :ensure t
+  :config
+  (add-hook 'text-mode-hook 'column-enforce-mode)
+  (add-hook 'prog-mode-hook 'column-enforce-mode)
+  (setq column-enforce-column 80))
+#+END_SRC
+Used to export to pdf
+#+BEGIN_SRC emacs-lisp 
+(use-package pdf-tools
+  :ensure t
+  :config
+  (pdf-tools-install))
+#+END_SRC
+
+Better package page
+#+BEGIN_SRC emacs-lisp 
+(use-package paradox
+  :ensure t
+  :config
+  (paradox-enable))
+#+END_SRC
+* Customization
+** Theme
+#+BEGIN_SRC emacs-lisp 
+(use-package dracula-theme
+  :ensure t
+  :config
+  (load-theme 'dracula))
+#+END_SRC
+** Font
+#+BEGIN_SRC emacs-lisp 
+(set-face-attribute 'default nil
+		    :family "fira code"
+		    :height 140)
+#+END_SRC
+** Misc
+Remove default emacs menus
+#+BEGIN_SRC emacs-lisp
+(scroll-bar-mode -1) 
+(tool-bar-mode -1)
+(menu-bar-mode -1)
+#+END_SRC
+Change yes or no to y or n
+#+BEGIN_SRC emacs-lisp
+(defalias 'yes-or-no-p 'y-or-n-p)
+#+END_SRC
+
+* TODO add backup
+* TODO add column enforce mode to keybindings
+* TODO add yassnippets
+* TODO add python stuff
