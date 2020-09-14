@@ -15,3 +15,4 @@ echo " ''|...|'  ||......|  ''|...|'  .|.   '|  ||......|  ''|...|'  .|.   '|   
 # for emacs gui
 export LIBGL_ALWAYS_INDIRECT=1
 alias emacs="setsid emacs"
+alias python=python3

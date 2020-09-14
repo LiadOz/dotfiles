@@ -1,5 +1,4 @@
 #+TITLE: Emacs Configuration
-
 * Core
 ** Startup Benchmark
 #+BEGIN_SRC emacs-lisp
@@ -85,35 +84,34 @@ Set line numbers to hybrid
 
 (use-package general :ensure t)
 #+END_SRC
-* Keybindings
+* Packages
+** YASnipet
+Snippets engine for emacs.
+use yas-describe-tables to view mode specific snippets.
 #+BEGIN_SRC emacs-lisp
-(general-define-key
- :states '(normal visual insert emacs)
- :prefix "SPC"
- :non-normal-prefix "C-SPC"
- "SPC"	'avy-goto-char-2
-  "b"		'switch-to-buffer
-  "f"		'helm-find-files
-  "p"		'(:ignore t :which-key "Projectile")
-  "pp"		'(helm-projectile-switch-project :wk "Switch Project")
-  "pf"		'(helm-projectile-find-file :wk "Find File")
-  "pF"		'(helm-projectile-find-file-in-known-projects
-    :wk "find In All Projects")
-  "pb"		'(helm-projectile-switch-to-buffer :wk "Switch Buffer")
-  "pe"		'(helm-projectile-recentf :wk "Recent Files")
-  "pg"		'(helm-projectile-grep :wk "grep Project")
-  "qq"		'eval-buffer)
+  (use-package yasnippet :ensure t
+    :config
+    ;;(setq yas-snippet-dirs '("~/.emacs.d/snippets"))
+    (yas-global-mode 1))
 #+END_SRC
-* Misc Packages
+
+snippet package
+#+BEGIN_SRC emacs-lisp
+  (use-package yasnippet-snippets :ensure t)
+#+END_SRC
+
+** Other
 Enforcing 80 characters in line for all buffers
 #+BEGIN_SRC emacs-lisp 
 (use-package column-enforce-mode
   :ensure t
+
   :config
   (add-hook 'text-mode-hook 'column-enforce-mode)
   (add-hook 'prog-mode-hook 'column-enforce-mode)
   (setq column-enforce-column 80))
 #+END_SRC
+
 Used to export to pdf
 #+BEGIN_SRC emacs-lisp 
 (use-package pdf-tools
@@ -129,13 +127,51 @@ Better package page
   :config
   (paradox-enable))
 #+END_SRC
+
+anzu evil
+#+begin_src emacs-lisp
+  (use-package evil-anzu :ensure t
+    :config
+    (global-anzu-mode))
+#+end_src
+
+neotree
+#+begin_src emacs-lisp
+  (use-package neotree :ensure t)
+#+end_src
 * Customization
+** Backup
+backup every saved file
+#+begin_src emacs-lisp
+  (setq
+   backup-by-copying t      ; don't clobber symlinks
+   backup-directory-alist '(("." . "~/.saves/")) 
+   delete-old-versions t
+   kept-old-versions 10
+   version-control t)
+#+end_src
+
+backup undo tree
+#+begin_src emacs-lisp
+  (global-undo-tree-mode)
+  (setq undo-tree-auto-save-history t)
+  (setq undo-tree-history-directory-alist '(("." . "~/.emacs.d/undo")))
+#+end_src
+
+** Modeline
+Doom emacs modeline
+#+begin_src emacs-lisp
+  (use-package doom-modeline :ensure t
+    :init (doom-modeline-mode 1)
+    :config
+    (setq doom-modeline-height 40))
+#+end_src
 ** Theme
 #+BEGIN_SRC emacs-lisp 
-(use-package dracula-theme
-  :ensure t
-  :config
-  (load-theme 'dracula))
+  (use-package base16-theme
+    :ensure t
+    :config
+    (load-theme 'base16-google-dark))
 #+END_SRC
 ** Font
 #+BEGIN_SRC emacs-lisp 
@@ -150,12 +186,59 @@ Remove default emacs menus
 (tool-bar-mode -1)
 (menu-bar-mode -1)
 #+END_SRC
+
 Change yes or no to y or n
 #+BEGIN_SRC emacs-lisp
 (defalias 'yes-or-no-p 'y-or-n-p)
 #+END_SRC
 
-* TODO add backup
-* TODO add column enforce mode to keybindings
-* TODO add yassnippets
+Setting vim like scrolling
+#+begin_src emacs-lisp
+  (setq scroll-step 1)
+  (setq scroll-margin 1)
+#+end_src
+* Keybindings
+** Global Bindings
+#+BEGIN_SRC emacs-lisp
+  (general-define-key
+   :states '(normal visual insert emacs)
+   :prefix "SPC"
+   :non-normal-prefix "C-SPC"
+   "SPC"	'avy-goto-char-2
+    "f"		'helm-find-files
+    "y"		'yas-describe-tables
+
+    "p"		'(:ignore t :which-key "Projectile")
+    "pp"		'(helm-projectile-switch-project :wk "Switch Project")
+    "pf"		'(helm-projectile-find-file :wk "Find File")
+    "pF"		'(helm-projectile-find-file-in-known-projects
+      :wk "find In All Projects")
+    "pb"		'(helm-projectile-switch-to-buffer :wk "Switch Buffer")
+    "pe"		'(helm-projectile-recentf :wk "Recent Files")
+    "pg"		'(helm-projectile-grep :wk "grep Project")
+
+    "t"		'(:ignore t :which-key "Toggles")
+    "tt"		'undo-tree-visualize
+    "tc"		'column-enforce-mode
+    
+    "b"		'(:ignore t :which-key "Buffers")
+    "bb"		'switch-to-buffer
+    "bk"		'kill-current-buffer
+
+
+    "qq"		'eval-buffer)
+#+END_SRC
+** Mode Specific
+Test for org mode specific keys.
+You can find what keymap is being for key by using C-h k and typing the key
+#+BEGIN_SRC emacs-lisp
+  (general-define-key
+   :states '(normal visual insert emacs)
+   :keymaps 'org-mode-map
+   :prefix ","
+   :non-normal-prefix "C-,"
+   "'"	'org-edit-special
+   )
+#+END_SRC
+
 * TODO add python stuff
