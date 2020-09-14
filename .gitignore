@@ -1,0 +1,16 @@
+# Ignore everything
+/*
+# Except these
+!.gitignore
+!.vim/UltiSnips/cpp.snippets
+!.vim/autoload/plug.vim
+!.vim/README
+!.vim/vimrc
+!.gdbinit
+!.gitconfig
+!.tmux.conf
+!.wsl.confing
+!.zsh_defaults.sh
+!.README.org
+!.emacs.d/init.el
+!.emacs.d/config.org
