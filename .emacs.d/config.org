@@ -115,10 +115,10 @@ Enforcing 80 characters in line for all buffers
 
 Used to export to pdf
 #+BEGIN_SRC emacs-lisp 
-(use-package pdf-tools
-  :ensure t
-  :config
-  (pdf-tools-install))
+;(use-package pdf-tools
+;  :ensure t
+;  :config
+;  (pdf-tools-install))
 #+END_SRC
 
 Better package page
