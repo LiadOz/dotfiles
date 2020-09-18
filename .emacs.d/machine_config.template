@@ -1,0 +1,8 @@
+#+title: Machine Config
+#+description: Machine specific config file
+* Font
+#+BEGIN_SRC emacs-lisp 
+(set-face-attribute 'default nil
+		    :family "fira code"
+		    :height 200)
+#+END_SRC

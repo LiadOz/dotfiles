@@ -1,4 +1,5 @@
 #+TITLE: Emacs Configuration
+#+description: Global config file
 * Core
 ** Startup Benchmark
 #+BEGIN_SRC emacs-lisp
@@ -164,7 +165,8 @@ Doom emacs modeline
   (use-package doom-modeline :ensure t
     :init (doom-modeline-mode 1)
     :config
-    (setq doom-modeline-height 40))
+    (setq doom-modeline-height 10)
+    (setq doom-modeline-bar-width 3))
 #+end_src
 ** Theme
 #+BEGIN_SRC emacs-lisp 
@@ -177,7 +179,7 @@ Doom emacs modeline
 #+BEGIN_SRC emacs-lisp 
 (set-face-attribute 'default nil
 		    :family "fira code"
-		    :height 140)
+		    :height 200)
 #+END_SRC
 ** Misc
 Remove default emacs menus
@@ -204,29 +206,29 @@ Setting vim like scrolling
    :states '(normal visual insert emacs)
    :prefix "SPC"
    :non-normal-prefix "C-SPC"
-   "SPC"	'avy-goto-char-2
-    "f"		'helm-find-files
-    "y"		'yas-describe-tables
+   "SPC"        'avy-goto-char-2
+    "f"         'helm-find-files
+    "y"         'yas-describe-tables
 
-    "p"		'(:ignore t :which-key "Projectile")
-    "pp"		'(helm-projectile-switch-project :wk "Switch Project")
-    "pf"		'(helm-projectile-find-file :wk "Find File")
-    "pF"		'(helm-projectile-find-file-in-known-projects
+    "p"         '(:ignore t :which-key "Projectile")
+    "pp"                '(helm-projectile-switch-project :wk "Switch Project")
+    "pf"                '(helm-projectile-find-file :wk "Find File")
+    "pF"                '(helm-projectile-find-file-in-known-projects
       :wk "find In All Projects")
-    "pb"		'(helm-projectile-switch-to-buffer :wk "Switch Buffer")
-    "pe"		'(helm-projectile-recentf :wk "Recent Files")
-    "pg"		'(helm-projectile-grep :wk "grep Project")
+    "pb"                '(helm-projectile-switch-to-buffer :wk "Switch Buffer")
+    "pe"                '(helm-projectile-recentf :wk "Recent Files")
+    "pg"                '(helm-projectile-grep :wk "grep Project")
 
-    "t"		'(:ignore t :which-key "Toggles")
-    "tt"		'undo-tree-visualize
-    "tc"		'column-enforce-mode
+    "t"         '(:ignore t :which-key "Toggles")
+    "tt"                'undo-tree-visualize
+    "tc"                'column-enforce-mode
     
-    "b"		'(:ignore t :which-key "Buffers")
-    "bb"		'switch-to-buffer
-    "bk"		'kill-current-buffer
+    "b"         '(:ignore t :which-key "Buffers")
+    "bb"                'switch-to-buffer
+    "bk"                'kill-buffer-and-window
 
 
-    "qq"		'eval-buffer)
+    "qq"                'eval-buffer)
 #+END_SRC
 ** Mode Specific
 Test for org mode specific keys.

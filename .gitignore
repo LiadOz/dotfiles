@@ -14,3 +14,4 @@
 !.README.org
 !.emacs.d/init.el
 !.emacs.d/config.org
+!.emacs.d/machine_config.template
