@@ -26,11 +26,22 @@
 #+END_SRC
 ** Auto Complete
 #+Begin_SRC emacs-lisp 
-(use-package auto-complete
-  :ensure t
-  :config
-  (ac-config-default))
+  ;(use-package auto-complete
+  ;  :ensure t
+  ;  :config
+  ;  (ac-config-default))
 #+END_SRC
+Company
+#+begin_src emacs-lisp
+  (use-package company :ensure t
+    :init
+    (add-hook 'after-init-hook 'global-company-mode))
+  (use-package company-statistics :ensure t
+    :config (company-statistics-mode))
+  (use-package company-quickhelp :ensure t
+    :config (company-quickhelp-mode))
+#+end_src
+
 ** Helm
 A completion framework
 #+Begin_SRC emacs-lisp 
@@ -39,7 +50,6 @@ A completion framework
   :config
   (helm-mode 1))
 #+END_SRC
-** Helm Projectile
 Manage projects easily, [[tuhdo.github.io/helm-projectile.html][guide]].
 #+Begin_SRC emacs-lisp 
 (use-package helm-projectile :ensure t
@@ -48,6 +58,10 @@ Manage projects easily, [[tuhdo.github.io/helm-projectile.html][guide]].
   (setq projectile-completion-system 'helm)
   (helm-projectile-on))
 #+END_SRC
+Company
+#+begin_src emacs-lisp
+  (use-package helm-company :ensure t)
+#+end_src
 ** Relative Line Numbers
 Set line numbers to hybrid
 #+BEGIN_SRC emacs-lisp
@@ -86,6 +100,14 @@ Set line numbers to hybrid
 (use-package general :ensure t)
 #+END_SRC
 * Packages
+** Code Editing
+Syntax Checking
+#+begin_src emacs-lisp
+  ;(use-package flycheck :ensure t
+    ;(global-flycheck-mode))
+  (use-package flycheck-pos-tip :ensure t)
+  (global-flycheck-mode)
+#+end_src
 ** YASnipet
 Snippets engine for emacs.
 use yas-describe-tables to view mode specific snippets.
@@ -100,7 +122,78 @@ snippet package
 #+BEGIN_SRC emacs-lisp
   (use-package yasnippet-snippets :ensure t)
 #+END_SRC
+** Git
+evil magit
+#+begin_src emacs-lisp
+  (use-package evil-magit :ensure t)
+#+end_src
+git gutter
 
+#+begin_src emacs-lisp
+  (use-package git-gutter-fringe :ensure t
+    :config
+    (setq git-gutter-fr:side 'right-fringe)
+    (global-git-gutter-mode))
+#+end_src
+** Python
+Python default executable
+#+begin_src emacs-lisp
+  (setq python-shell-interpreter "python3")
+#+end_src
+
+Python Formatting (you must have yapf installed)
+#+begin_src emacs-lisp
+  (use-package yapfify :ensure t
+    :config
+    (add-hook 'python-mode-hook 'yapf-mode))
+#+end_src
+
+Code completion
+#+begin_src emacs-lisp
+  (use-package anaconda-mode :ensure t
+    :config
+    (add-hook 'python-mode-hook 'anaconda-mode)
+    (add-hook 'python-mode-hook 'anaconda-eldoc-mode))
+  (use-package company-anaconda :ensure t
+    :config (add-to-list 'company-backends 'company-anaconda))
+#+end_src
+
+Env setting
+#+begin_src emacs-lisp
+  (use-package pyvenv :ensure t)
+#+end_src
+
+Python mode keybindings
+#+begin_src emacs-lisp
+  (general-define-key
+   :states '(normal visual insert emacs)
+   :keymaps 'python-mode-map
+   :prefix ","
+   :non-normal-prefix "C-,"
+   "a"    'pyvenv-activate
+   "p"    'run-python
+   "r"    'python-shell-send-region
+   "b"    'python-shell-send-buffer
+   )
+#+end_src
+
+Python Inferior keybindings
+#+begin_src emacs-lisp
+  (general-define-key
+   :keymaps 'inferior-python-mode-map
+   "C-n"  'comint-next-input
+   "C-p"  'comint-previous-input
+   )
+  (general-define-key
+   :states '(normal visual insert emacs)
+   :keymaps 'inferior-python-mode-map
+   :prefix ","
+   :non-normal-prefix "C-,"
+   "h"    'comint-dynamic-list-input-ring
+   "i"    'comint-interrupt-subjob
+   "x"    'comint-send-eof
+   )
+#+end_src
 ** Other
 Enforcing 80 characters in line for all buffers
 #+BEGIN_SRC emacs-lisp 
@@ -138,7 +231,23 @@ anzu evil
 
 neotree
 #+begin_src emacs-lisp
-  (use-package neotree :ensure t)
+  (use-package neotree :ensure t
+    :config
+    (setq projectile-switch-project-action 'neotree-projectile-action)
+    (setq neo-theme (if (display-graphic-p) 'icons 'arrow)))
+#+end_src
+
+vim like fringe
+#+begin_src emacs-lisp
+  (use-package vi-tilde-fringe :ensure t
+    :config
+    (global-vi-tilde-fringe-mode))
+#+end_src
+
+beautiful icons 
+makes sure you first use "all-the-icons-install" in a new computer
+#+begin_src emacs-lisp
+  (use-package all-the-icons :ensure t)
 #+end_src
 * Customization
 ** Backup
@@ -161,6 +270,7 @@ backup undo tree
 
 ** Modeline
 Doom emacs modeline
+
 #+begin_src emacs-lisp
   (use-package doom-modeline :ensure t
     :init (doom-modeline-mode 1)
@@ -173,8 +283,9 @@ Doom emacs modeline
   (use-package base16-theme
     :ensure t
     :config
-    (load-theme 'base16-google-dark))
+    (load-theme 'base16-material))
 #+END_SRC
+base16-harmonic-dark - nice for bright places
 ** Font
 #+BEGIN_SRC emacs-lisp 
 (set-face-attribute 'default nil
@@ -209,6 +320,9 @@ Setting vim like scrolling
    "SPC"        'avy-goto-char-2
     "f"         'helm-find-files
     "y"         'yas-describe-tables
+    "a"         'helm-M-x
+    "n"         'neotree-toggle
+    "m"         'magit-status
 
     "p"         '(:ignore t :which-key "Projectile")
     "pp"                '(helm-projectile-switch-project :wk "Switch Project")
@@ -229,6 +343,8 @@ Setting vim like scrolling
 
 
     "qq"                'eval-buffer)
+  (general-define-key
+   "C-;" 'helm-company)
 #+END_SRC
 ** Mode Specific
 Test for org mode specific keys.
@@ -239,8 +355,36 @@ You can find what keymap is being for key by using C-h k and typing the key
    :keymaps 'org-mode-map
    :prefix ","
    :non-normal-prefix "C-,"
-   "'"	'org-edit-special
+   "'"  'org-edit-special
    )
+  (general-define-key
+   :states '(normal visual insert emacs)
+   :keymaps 'org-src-mode-map
+   :prefix ","
+   :non-normal-prefix "C-,"
+   "'"  'org-edit-src-exit
+   )
+  (general-define-key
+   :states '(normal visual insert emacs)
+   :keymaps 'neotree-mode-map
+   "RET"  'neotree-enter
+   "TAB"  'neotree-quick-look
+   "H"    'neotree-hidden-file-toggle
+   "q"    'neotree-hide
+   "r"    'neotree-rename-node
+   )
+   
+   
 #+END_SRC
 
-* TODO add python stuff
+* TODO things
+** fix python BeautifulSoup problem
+[[https://emacs.stackexchange.com/questions/13989/inferior-python-shell-slow-crash-on-long-lines][try this]]
+** add theme cycling
+** check out elpy or lsp-mode
+** disable flycheck in here
+[[https://emacs.stackexchange.com/questions/16766/how-to-turn-off-emacs-lisp-checkdoc-of-flycheck-when-edit-source-block-in-org][do this]]
+** add all the icons
+** create modeline
+[[https://github.com/domtronn/all-the-icons.el/wiki/Mode-Line][this]] with [[https://github.com/Malabarba/smart-mode-line][that]]
+* TODO issues
