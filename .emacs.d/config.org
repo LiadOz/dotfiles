@@ -24,6 +24,31 @@
   (setq evil-insert-state-modes nil)
   (setq evil-motion-state-modes nil))
 #+END_SRC
+
+** General
+create keybindings
+#+begin_src emacs-lisp
+  (use-package general :ensure t)
+  (defconst leader-key "SPC")
+  (defconst leader-key-alt "C-SPC")
+  (defconst mode-leader-key ",")
+  (defconst mode-leader-key-alt "C-,")
+  (general-create-definer main-definer
+    :states '(normal visual insert emacs)
+    :prefix leader-key
+    :non-normal-prefix leader-key-alt)
+  (general-create-definer minor-definer
+    :states '(normal visual insert emacs)
+    :prefix leader-key
+    :non-normal-prefix leader-key-alt)
+  (main-definer
+    "t"   '(:ignore t :which-key "Toggles")
+    "tt"  'undo-tree-visualize
+
+    "b"   '(:ignore t :which-key "Buffers")
+    "bb"  'switch-to-buffer
+    "bk"  'kill-buffer-and-window)
+#+end_src
 ** Auto Complete
 #+Begin_SRC emacs-lisp 
   ;(use-package auto-complete
@@ -45,22 +70,38 @@ Company
 ** Helm
 A completion framework
 #+Begin_SRC emacs-lisp 
-(use-package helm
-  :ensure t
-  :config
-  (helm-mode 1))
+  (use-package helm
+    :ensure t
+    :general
+    (main-definer
+      "f" 'helm-find-files
+      "a" 'helm-M-x)
+    :config
+    (helm-mode 1))
 #+END_SRC
 Manage projects easily, [[tuhdo.github.io/helm-projectile.html][guide]].
 #+Begin_SRC emacs-lisp 
-(use-package helm-projectile :ensure t
-  :config
-  (projectile-global-mode)
-  (setq projectile-completion-system 'helm)
-  (helm-projectile-on))
+  (use-package helm-projectile :ensure t
+    :general
+    (main-definer
+      "p"         '(:ignore t :which-key "Projectile")
+      "pp"        '(helm-projectile-switch-project :wk "Switch Project")
+      "pf"        '(helm-projectile-find-file :wk "Find File")
+      "pF"        '(helm-projectile-find-file-in-known-projects
+                    :wk "Find In All Projects")
+      "pb"        '(helm-projectile-switch-to-buffer :wk "Switch Buffer")
+      "pe"        '(helm-projectile-recentf :wk "Recent Files")
+      "pg"        '(helm-projectile-grep :wk "grep Project"))
+    :config
+    (projectile-global-mode)
+    (setq projectile-completion-system 'helm)
+    (helm-projectile-on))
 #+END_SRC
 Company
 #+begin_src emacs-lisp
-  (use-package helm-company :ensure t)
+  (use-package helm-company :ensure t
+    :general
+    ("C-;" 'helm-company))
 #+end_src
 ** Relative Line Numbers
 Set line numbers to hybrid
@@ -91,13 +132,15 @@ Set line numbers to hybrid
 #+END_SRC
 ** Other
 #+BEGIN_SRC emacs-lisp
-(use-package which-key
-  :ensure t
-  :config (which-key-mode))
+  (use-package which-key
+    :ensure t
+    :config (which-key-mode))
 
-(use-package avy :ensure t)
+  (use-package avy :ensure t
+    :general
+    (main-definer
+      "SPC" 'avy-goto-char-2))
 
-(use-package general :ensure t)
 #+END_SRC
 * Packages
 ** Code Editing
@@ -113,6 +156,9 @@ Snippets engine for emacs.
 use yas-describe-tables to view mode specific snippets.
 #+BEGIN_SRC emacs-lisp
   (use-package yasnippet :ensure t
+    :general
+    (main-definer
+      "y" 'yas-describe-tables)
     :config
     ;;(setq yas-snippet-dirs '("~/.emacs.d/snippets"))
     (yas-global-mode 1))
@@ -125,7 +171,10 @@ snippet package
 ** Git
 evil magit
 #+begin_src emacs-lisp
-  (use-package evil-magit :ensure t)
+  (use-package evil-magit :ensure t
+    :general
+    (main-definer
+      "m" 'magit-status))
 #+end_src
 git gutter
 
@@ -197,13 +246,15 @@ Python Inferior keybindings
 ** Other
 Enforcing 80 characters in line for all buffers
 #+BEGIN_SRC emacs-lisp 
-(use-package column-enforce-mode
-  :ensure t
-
-  :config
-  (add-hook 'text-mode-hook 'column-enforce-mode)
-  (add-hook 'prog-mode-hook 'column-enforce-mode)
-  (setq column-enforce-column 80))
+  (use-package column-enforce-mode
+    :ensure t
+    :general
+    (main-definer
+      "c" 'column-enforce-mode)
+    :config
+    (add-hook 'text-mode-hook 'column-enforce-mode)
+    (add-hook 'prog-mode-hook 'column-enforce-mode)
+    (setq column-enforce-column 80))
 #+END_SRC
 
 Used to export to pdf
@@ -232,6 +283,17 @@ anzu evil
 neotree
 #+begin_src emacs-lisp
   (use-package neotree :ensure t
+    :general
+    (main-definer
+      "n" 'neotree-toggle)
+    (general-define-key
+      :states '(normal visual insert emacs)
+      :keymaps 'neotree-mode-map
+      "RET"       'neotree-enter
+      "TAB"       'neotree-quick-look
+      "H"         'neotree-hidden-file-toggle
+      "q"         'neotree-hide
+      "r"         'neotree-rename-node)
     :config
     (setq projectile-switch-project-action 'neotree-projectile-action)
     (setq neo-theme (if (display-graphic-p) 'icons 'arrow)))
@@ -311,69 +373,18 @@ Setting vim like scrolling
   (setq scroll-margin 1)
 #+end_src
 * Keybindings
-** Global Bindings
-#+BEGIN_SRC emacs-lisp
-  (general-define-key
-   :states '(normal visual insert emacs)
-   :prefix "SPC"
-   :non-normal-prefix "C-SPC"
-   "SPC"        'avy-goto-char-2
-    "f"         'helm-find-files
-    "y"         'yas-describe-tables
-    "a"         'helm-M-x
-    "n"         'neotree-toggle
-    "m"         'magit-status
-
-    "p"         '(:ignore t :which-key "Projectile")
-    "pp"                '(helm-projectile-switch-project :wk "Switch Project")
-    "pf"                '(helm-projectile-find-file :wk "Find File")
-    "pF"                '(helm-projectile-find-file-in-known-projects
-      :wk "find In All Projects")
-    "pb"                '(helm-projectile-switch-to-buffer :wk "Switch Buffer")
-    "pe"                '(helm-projectile-recentf :wk "Recent Files")
-    "pg"                '(helm-projectile-grep :wk "grep Project")
-
-    "t"         '(:ignore t :which-key "Toggles")
-    "tt"                'undo-tree-visualize
-    "tc"                'column-enforce-mode
-    
-    "b"         '(:ignore t :which-key "Buffers")
-    "bb"                'switch-to-buffer
-    "bk"                'kill-buffer-and-window
-
-
-    "qq"                'eval-buffer)
-  (general-define-key
-   "C-;" 'helm-company)
-#+END_SRC
 ** Mode Specific
 Test for org mode specific keys.
 You can find what keymap is being for key by using C-h k and typing the key
 #+BEGIN_SRC emacs-lisp
-  (general-define-key
-   :states '(normal visual insert emacs)
+  (minor-definer
    :keymaps 'org-mode-map
-   :prefix ","
-   :non-normal-prefix "C-,"
    "'"  'org-edit-special
    )
-  (general-define-key
-   :states '(normal visual insert emacs)
+  (minor-definer
    :keymaps 'org-src-mode-map
-   :prefix ","
-   :non-normal-prefix "C-,"
    "'"  'org-edit-src-exit
    )
-  (general-define-key
-   :states '(normal visual insert emacs)
-   :keymaps 'neotree-mode-map
-   "RET"  'neotree-enter
-   "TAB"  'neotree-quick-look
-   "H"    'neotree-hidden-file-toggle
-   "q"    'neotree-hide
-   "r"    'neotree-rename-node
-   )
-   
    
 #+END_SRC
 
