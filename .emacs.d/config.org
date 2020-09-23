@@ -28,7 +28,9 @@
 ** General
 create keybindings
 #+begin_src emacs-lisp
-  (use-package general :ensure t)
+  (use-package general :ensure t
+    :init
+    (general-override-mode 1))
   (defconst leader-key "SPC")
   (defconst leader-key-alt "C-SPC")
   (defconst mode-leader-key ",")
@@ -48,6 +50,9 @@ create keybindings
     "b"   '(:ignore t :which-key "Buffers")
     "bb"  'switch-to-buffer
     "bk"  'kill-buffer-and-window)
+    "tf"  '(toggle-frame-fullscreen :wk "Fullscreen")
+    "tF"  'auto-fill-mode
+    "ts"  'text-scale-adjust
 #+end_src
 ** Auto Complete
 #+Begin_SRC emacs-lisp 
@@ -317,9 +322,10 @@ backup every saved file
 #+begin_src emacs-lisp
   (setq
    backup-by-copying t      ; don't clobber symlinks
-   backup-directory-alist '(("." . "~/.saves/")) 
+   backup-directory-alist `(("." . "~/.saves")) 
    delete-old-versions t
-   kept-old-versions 10
+   kept-new-versions 6
+   kept-old-versions 5
    version-control t)
 #+end_src
 
@@ -331,14 +337,19 @@ backup undo tree
 #+end_src
 
 ** Modeline
-Doom emacs modeline
-
 #+begin_src emacs-lisp
-  (use-package doom-modeline :ensure t
-    :init (doom-modeline-mode 1)
-    :config
-    (setq doom-modeline-height 10)
-    (setq doom-modeline-bar-width 3))
+  (use-package smart-mode-line :ensure t
+    :config (sml/setup))
+#+end_src
+#+begin_src emacs-lisp
+;;  (use-package spaceline-all-the-icons :ensure t
+;;    :config
+;;    (spaceline-all-the-icons--setup-anzu)            ;; Enable anzu searching
+;;    (spaceline-all-the-icons--setup-package-updates) ;; Enable package update indicator
+;;    (spaceline-all-the-icons--setup-git-ahead)       ;; Enable # of commits ahead of upstream in git
+;;    (spaceline-all-the-icons--setup-paradox)         ;; Enable Paradox mode line
+;;    (spaceline-all-the-icons--setup-neotree)         ;; Enable Neotree mode line
+;;    (spaceline-all-the-icons-theme))
 #+end_src
 ** Theme
 #+BEGIN_SRC emacs-lisp 
@@ -372,6 +383,12 @@ Setting vim like scrolling
   (setq scroll-step 1)
   (setq scroll-margin 1)
 #+end_src
+
+nice defaults
+#+begin_src emacs-lisp
+  (add-hook 'text-mode-hook 'turn-on-auto-fill)
+  (setq fill-column 80)		; toggle wrapping text at the 80th character
+#+end_src
 * Keybindings
 ** Mode Specific
 Test for org mode specific keys.
@@ -385,7 +402,6 @@ You can find what keymap is being for key by using C-h k and typing the key
    :keymaps 'org-src-mode-map
    "'"  'org-edit-src-exit
    )
-   
 #+END_SRC
 
 * TODO things
@@ -398,4 +414,6 @@ You can find what keymap is being for key by using C-h k and typing the key
 ** add all the icons
 ** create modeline
 [[https://github.com/domtronn/all-the-icons.el/wiki/Mode-Line][this]] with [[https://github.com/Malabarba/smart-mode-line][that]]
+** remove minor modes from sml
 * TODO issues
+** backups don't work on main computer

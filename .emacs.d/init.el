@@ -5,10 +5,10 @@
  ;; If there is more than one, they won't work right.
  '(custom-safe-themes
    (quote
-    ("446cc97923e30dec43f10573ac085e384975d8a0c55159464ea6ef001f4a16ba" default)))
+    ("3c83b3676d796422704082049fc38b6966bcad960f896669dfc21a7a37a748fa" "c74e83f8aa4c78a121b52146eadb792c9facc5b1f02c917e3dbb454fca931223" "a27c00821ccfd5a78b01e4f35dc056706dd9ede09a8b90c6955ae6a390eb1c1e" "446cc97923e30dec43f10573ac085e384975d8a0c55159464ea6ef001f4a16ba" default)))
  '(package-selected-packages
    (quote
-    (yasnippet-snippets yapfify which-key vi-tilde-fringe use-package try pyvenv pdf-tools parent-mode paradox neotree helm-projectile helm-company gnu-elpa-keyring-update git-gutter-fringe general flycheck-pos-tip evil-magit evil-anzu dracula-theme doom-modeline company-statistics company-quickhelp company-anaconda column-enforce-mode color-theme-sanityinc-solarized benchmark-init base16-theme avy auto-complete))))
+    (spaceline-all-the-icons spaceline smart-mode-line company yasnippet-snippets yapfify which-key vi-tilde-fringe use-package try pyvenv pdf-tools parent-mode paradox neotree helm-projectile helm-company gnu-elpa-keyring-update git-gutter-fringe general flycheck-pos-tip evil-magit evil-anzu dracula-theme doom-modeline company-statistics company-quickhelp company-anaconda column-enforce-mode color-theme-sanityinc-solarized benchmark-init base16-theme avy auto-complete))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
