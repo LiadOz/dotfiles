@@ -29,30 +29,30 @@
 create keybindings
 #+begin_src emacs-lisp
   (use-package general :ensure t
-    :init
-    (general-override-mode 1))
+    :config
+    (general-override-mode))
   (defconst leader-key "SPC")
   (defconst leader-key-alt "C-SPC")
-  (defconst mode-leader-key ",")
-  (defconst mode-leader-key-alt "C-,")
+  (defconst minor-leader-key ",")
+  (defconst minor-leader-key-alt "C-,")
   (general-create-definer main-definer
     :states '(normal visual insert emacs)
     :prefix leader-key
     :non-normal-prefix leader-key-alt)
   (general-create-definer minor-definer
     :states '(normal visual insert emacs)
-    :prefix leader-key
-    :non-normal-prefix leader-key-alt)
+    :prefix minor-leader-key
+    :non-normal-prefix minor-leader-key-alt)
   (main-definer
     "t"   '(:ignore t :which-key "Toggles")
     "tt"  'undo-tree-visualize
+    "tf"  '(toggle-frame-fullscreen :wk "Fullscreen")
+    "tF"  'auto-fill-mode
+    "ts"  '(text-scale-adjust :wk "Font Size")
 
     "b"   '(:ignore t :which-key "Buffers")
     "bb"  'switch-to-buffer
     "bk"  'kill-buffer-and-window)
-    "tf"  '(toggle-frame-fullscreen :wk "Fullscreen")
-    "tF"  'auto-fill-mode
-    "ts"  'text-scale-adjust
 #+end_src
 ** Auto Complete
 #+Begin_SRC emacs-lisp 
@@ -388,6 +388,7 @@ nice defaults
 #+begin_src emacs-lisp
   (add-hook 'text-mode-hook 'turn-on-auto-fill)
   (setq fill-column 80)		; toggle wrapping text at the 80th character
+  (setq ring-bell-function 'ignore) ; stop the ringing
 #+end_src
 * Keybindings
 ** Mode Specific
