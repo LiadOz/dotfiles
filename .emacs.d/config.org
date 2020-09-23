@@ -14,45 +14,52 @@
 #+END_SRC
 ** Evil Mode
 #+BEGIN_SRC emacs-lisp
-(use-package evil
-  :ensure t ;; install the evil package if not installed
-  :init ;; tweak evil's configuration before loading it
-  (setq evil-want-C-u-scroll t)
-  :config ;; tweak evil after loading it
-  (evil-mode)
-  (setq evil-emacs-state-modes nil)
-  (setq evil-insert-state-modes nil)
-  (setq evil-motion-state-modes nil))
+  (use-package evil
+    :ensure t ;; install the evil package if not installed
+    :init ;; tweak evil's configuration before loading it
+    (setq evil-want-C-u-scroll t)
+    :config ;; tweak evil after loading it
+    (evil-mode))
 #+END_SRC
 
-** General
+** General (Keybinding Package)
 create keybindings
 #+begin_src emacs-lisp
   (use-package general :ensure t
     :config
     (general-override-mode))
+
   (defconst leader-key "SPC")
   (defconst leader-key-alt "C-SPC")
   (defconst minor-leader-key ",")
   (defconst minor-leader-key-alt "C-,")
+
   (general-create-definer main-definer
     :states '(normal visual insert emacs)
+    :keymaps 'override
     :prefix leader-key
     :non-normal-prefix leader-key-alt)
+
   (general-create-definer minor-definer
     :states '(normal visual insert emacs)
     :prefix minor-leader-key
     :non-normal-prefix minor-leader-key-alt)
+  (general-define-key
+   "TAB" 'self-insert-command)
   (main-definer
-    "t"   '(:ignore t :which-key "Toggles")
-    "tt"  'undo-tree-visualize
-    "tf"  '(toggle-frame-fullscreen :wk "Fullscreen")
-    "tF"  'auto-fill-mode
-    "ts"  '(text-scale-adjust :wk "Font Size")
+   "TAB"	'mode-line-other-buffer
 
-    "b"   '(:ignore t :which-key "Buffers")
-    "bb"  'switch-to-buffer
-    "bk"  'kill-buffer-and-window)
+   "t"	'(:ignore t :which-key "Toggles")
+   "tt"	'undo-tree-visualize
+   "tf"	'(toggle-frame-fullscreen :wk "Fullscreen")
+   "tF"	'auto-fill-mode
+   "ts"	'(text-scale-adjust :wk "Font Size")
+
+   "b"	'(:ignore t :which-key "Buffers")
+   "bb"	'switch-to-buffer
+   "bd"	'kill-buffer-and-window
+   "b]"	'next-buffer
+   "b["	'previous-buffer)
 #+end_src
 ** Auto Complete
 #+Begin_SRC emacs-lisp 
@@ -89,14 +96,14 @@ Manage projects easily, [[tuhdo.github.io/helm-projectile.html][guide]].
   (use-package helm-projectile :ensure t
     :general
     (main-definer
-      "p"         '(:ignore t :which-key "Projectile")
-      "pp"        '(helm-projectile-switch-project :wk "Switch Project")
-      "pf"        '(helm-projectile-find-file :wk "Find File")
-      "pF"        '(helm-projectile-find-file-in-known-projects
-                    :wk "Find In All Projects")
-      "pb"        '(helm-projectile-switch-to-buffer :wk "Switch Buffer")
-      "pe"        '(helm-projectile-recentf :wk "Recent Files")
-      "pg"        '(helm-projectile-grep :wk "grep Project"))
+      "p"		'(:ignore t :which-key "Projectile")
+      "pp"	'(helm-projectile-switch-project :wk "Switch Project")
+      "pf"	'(helm-projectile-find-file :wk "Find File")
+      "pF"	'(helm-projectile-find-file-in-known-projects
+		    :wk "Find In All Projects")
+      "pb"	'(helm-projectile-switch-to-buffer :wk "Switch Buffer")
+      "pe"	'(helm-projectile-recentf :wk "Recent Files")
+      "pg"	'(helm-projectile-grep :wk "grep Project"))
     :config
     (projectile-global-mode)
     (setq projectile-completion-system 'helm)
@@ -176,10 +183,12 @@ snippet package
 ** Git
 evil magit
 #+begin_src emacs-lisp
-  (use-package evil-magit :ensure t
+  (use-package magit :ensure t
     :general
     (main-definer
       "m" 'magit-status))
+  
+  (use-package evil-magit :ensure t)
 #+end_src
 git gutter
 
@@ -322,7 +331,7 @@ backup every saved file
 #+begin_src emacs-lisp
   (setq
    backup-by-copying t      ; don't clobber symlinks
-   backup-directory-alist `(("." . "~/.saves")) 
+   backup-directory-alist `(("." . "~/.saves/")) 
    delete-old-versions t
    kept-new-versions 6
    kept-old-versions 5
@@ -333,7 +342,7 @@ backup undo tree
 #+begin_src emacs-lisp
   (global-undo-tree-mode)
   (setq undo-tree-auto-save-history t)
-  (setq undo-tree-history-directory-alist '(("." . "~/.emacs.d/undo")))
+  (setq undo-tree-history-directory-alist '(("." . "~/.emacs.d/undo/")))
 #+end_src
 
 ** Modeline
@@ -350,6 +359,21 @@ backup undo tree
 ;;    (spaceline-all-the-icons--setup-paradox)         ;; Enable Paradox mode line
 ;;    (spaceline-all-the-icons--setup-neotree)         ;; Enable Neotree mode line
 ;;    (spaceline-all-the-icons-theme))
+#+end_src
+** Dashboard
+#+begin_src emacs-lisp
+  (use-package dashboard :ensure t
+    :config
+    (dashboard-setup-startup-hook)
+    (setq dashboard-startup-banner 2
+	  dashboard-set-heading-icons t
+	  dashboard-set-file-icons t
+	  dashboard-items '((recents . 5)
+			    (projects . 5)
+			    (agenda . 5))
+	  )
+    )
+
 #+end_src
 ** Theme
 #+BEGIN_SRC emacs-lisp 
