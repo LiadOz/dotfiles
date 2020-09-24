@@ -48,6 +48,10 @@ create keybindings
    "TAB" 'self-insert-command)
   (main-definer
    "TAB"	'mode-line-other-buffer
+   "c"	(general-simulate-key "C-c")
+   "h"	(general-simulate-key "C-h")
+   "u"	(general-simulate-key "C-u")
+   "x"	(general-simulate-key "C-x")
 
    "t"	'(:ignore t :which-key "Toggles")
    "tt"	'undo-tree-visualize
@@ -60,6 +64,16 @@ create keybindings
    "bd"	'kill-buffer-and-window
    "b]"	'next-buffer
    "b["	'previous-buffer)
+
+  (minor-definer
+   :keymaps 'org-mode-map
+   "'"	'org-edit-special
+   "c"	'org-ctrl-c-ctrl-c
+   )
+  (minor-definer
+   :keymaps 'org-src-mode-map
+   "'"  'org-edit-src-exit
+   )
 #+end_src
 ** Auto Complete
 #+Begin_SRC emacs-lisp 
@@ -158,10 +172,13 @@ Set line numbers to hybrid
 ** Code Editing
 Syntax Checking
 #+begin_src emacs-lisp
-  ;(use-package flycheck :ensure t
-    ;(global-flycheck-mode))
+  (use-package flycheck :ensure t
+    :config
+    (defun disable-flycheck-mode()
+      (flycheck-mode -1))
+    (add-hook 'org-src-mode-hook 'disable-flycheck-mode)
+    (global-flycheck-mode))
   (use-package flycheck-pos-tip :ensure t)
-  (global-flycheck-mode)
 #+end_src
 ** YASnipet
 Snippets engine for emacs.
@@ -264,7 +281,7 @@ Enforcing 80 characters in line for all buffers
     :ensure t
     :general
     (main-definer
-      "c" 'column-enforce-mode)
+      "tc" 'column-enforce-mode)
     :config
     (add-hook 'text-mode-hook 'column-enforce-mode)
     (add-hook 'prog-mode-hook 'column-enforce-mode)
@@ -348,7 +365,10 @@ backup undo tree
 ** Modeline
 #+begin_src emacs-lisp
   (use-package smart-mode-line :ensure t
-    :config (sml/setup))
+    :config (sml/setup)
+    (setq rm-blacklist '(" hl-p" " Helm" " ~" " Anzu" " GitGutter" " ARev"
+			 " yas" " WK" " compnay" " Undo-Tree" " Fill" " 80col"
+			 )))
 #+end_src
 #+begin_src emacs-lisp
 ;;  (use-package spaceline-all-the-icons :ensure t
@@ -362,10 +382,12 @@ backup undo tree
 #+end_src
 ** Dashboard
 #+begin_src emacs-lisp
-  (use-package dashboard :ensure t
+  (use-package dashboard
+    :ensure t
     :config
     (dashboard-setup-startup-hook)
     (setq dashboard-startup-banner 2
+	  dashboard-show-shortcuts nil
 	  dashboard-set-heading-icons t
 	  dashboard-set-file-icons t
 	  dashboard-items '((recents . 5)
@@ -407,36 +429,20 @@ Setting vim like scrolling
   (setq scroll-step 1)
   (setq scroll-margin 1)
 #+end_src
-
 nice defaults
 #+begin_src emacs-lisp
   (add-hook 'text-mode-hook 'turn-on-auto-fill)
-  (setq fill-column 80)		; toggle wrapping text at the 80th character
-  (setq ring-bell-function 'ignore) ; stop the ringing
+  (setq-default fill-column 80)		; toggle wrapping text at the 80th character
+  (setq ring-bell-function 'ignore)	; stop the ringing
 #+end_src
-* Keybindings
-** Mode Specific
 Test for org mode specific keys.
 You can find what keymap is being for key by using C-h k and typing the key
 #+BEGIN_SRC emacs-lisp
-  (minor-definer
-   :keymaps 'org-mode-map
-   "'"  'org-edit-special
-   )
-  (minor-definer
-   :keymaps 'org-src-mode-map
-   "'"  'org-edit-src-exit
-   )
 #+END_SRC
 
 * TODO things
 ** fix python BeautifulSoup problem
 [[https://emacs.stackexchange.com/questions/13989/inferior-python-shell-slow-crash-on-long-lines][try this]]
-** add theme cycling
-** check out elpy or lsp-mode
-** disable flycheck in here
-[[https://emacs.stackexchange.com/questions/16766/how-to-turn-off-emacs-lisp-checkdoc-of-flycheck-when-edit-source-block-in-org][do this]]
-** add all the icons
 ** create modeline
 [[https://github.com/domtronn/all-the-icons.el/wiki/Mode-Line][this]] with [[https://github.com/Malabarba/smart-mode-line][that]]
 ** remove minor modes from sml
