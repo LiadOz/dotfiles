@@ -13,6 +13,9 @@
 * Some Notes
 ** Computer specific settings
 - create DROPBOX_DIR environment variable 
+** Dependicies
+   - setuptools package for python
+   - texlive-latex-extra and python-pygments for literate programming
 * Other Packages Used
 ** Shell
    zsh and oh-my-zsh after installation add plugins git, fzf, tmux, vi-mode

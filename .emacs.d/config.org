@@ -53,6 +53,8 @@ create keybindings
    "u"	(general-simulate-key "C-u")
    "x"	(general-simulate-key "C-x")
 
+   "s"	'shell
+
    "t"	'(:ignore t :which-key "Toggles")
    "tt"	'undo-tree-visualize
    "tf"	'(toggle-frame-fullscreen :wk "Fullscreen")
@@ -132,10 +134,10 @@ Company
 ** Relative Line Numbers
 Set line numbers to hybrid
 #+BEGIN_SRC emacs-lisp
-;;(add-hook 'conf-mode-hook #'display-line-numbers-mode)
-;;(add-hook 'prog-mode-hook #'display-line-numbers-mode)
-;;(add-hook 'text-mode-hook #'display-line-numbers-mode)
-;;(setq-default display-line-numbers-type 'relative)
+(add-hook 'conf-mode-hook #'display-line-numbers-mode)
+(add-hook 'prog-mode-hook #'display-line-numbers-mode)
+(add-hook 'text-mode-hook #'display-line-numbers-mode)
+(setq-default display-line-numbers-type 'relative)
 #+END_SRC
 ** WSL Integeration
 #+BEGIN_SRC emacs-lisp
@@ -156,6 +158,24 @@ Set line numbers to hybrid
      browse-url-browser-function 'browse-url-generic)
     )))
 #+END_SRC
+** Org Mode
+Settings for literate programming
+#+begin_src emacs-lisp
+  (org-babel-do-load-languages
+   'org-babel-load-languages '(
+			       (python . t)
+			       ))
+  (setq org-src-fontify-natively t
+	org-latex-listings 'minted
+	org-latex-packages-alist '(("" "minted"))
+	org-confirm-babel-evaluate nil)
+  (setq org-latex-pdf-process
+	'("pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"
+      "bibtex %b"
+      "pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"
+      "pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"))
+#+end_src
+
 ** Other
 #+BEGIN_SRC emacs-lisp
   (use-package which-key
@@ -230,7 +250,11 @@ Python Formatting (you must have yapf installed)
 
 Code completion
 #+begin_src emacs-lisp
-  (use-package anaconda-mode :ensure t
+  (use-package anaconda-mode
+    :ensure t
+    :general
+    (minor-definer
+      "a"	'pythonic-activate)
     :config
     (add-hook 'python-mode-hook 'anaconda-mode)
     (add-hook 'python-mode-hook 'anaconda-eldoc-mode))
@@ -250,7 +274,7 @@ Python mode keybindings
    :keymaps 'python-mode-map
    :prefix ","
    :non-normal-prefix "C-,"
-   "a"    'pyvenv-activate
+;   "a"    'pyvenv-activate
    "p"    'run-python
    "r"    'python-shell-send-region
    "b"    'python-shell-send-buffer
@@ -428,10 +452,12 @@ Setting vim like scrolling
 #+begin_src emacs-lisp
   (setq scroll-step 1)
   (setq scroll-margin 1)
+  (setq scroll-conservatively 10000)
 #+end_src
 nice defaults
 #+begin_src emacs-lisp
   (add-hook 'text-mode-hook 'turn-on-auto-fill)
+  (add-hook 'prog-mode-hook 'turn-on-auto-fill)
   (setq-default fill-column 80)		; toggle wrapping text at the 80th character
   (setq ring-bell-function 'ignore)	; stop the ringing
 #+end_src

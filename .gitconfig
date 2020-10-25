@@ -6,3 +6,5 @@
 [core]
 	whitespace = cr-at-eol
 	autocrlf = input
+[github]
+	user = LiadOz
