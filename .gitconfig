@@ -6,5 +6,6 @@
 [core]
 	whitespace = cr-at-eol
 	autocrlf = input
+	editor = vim
 [github]
 	user = LiadOz

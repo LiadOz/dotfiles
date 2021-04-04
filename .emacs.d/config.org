@@ -15,11 +15,17 @@
 ** Evil Mode
 #+BEGIN_SRC emacs-lisp
   (use-package evil
-    :ensure t ;; install the evil package if not installed
-    :init ;; tweak evil's configuration before loading it
+    :ensure t
+    :init
     (setq evil-want-C-u-scroll t)
-    :config ;; tweak evil after loading it
+    (setq evil-want-keybinding nil)
+    :config
     (evil-mode))
+  (use-package evil-collection
+    :after evil
+    :ensure t
+    :config
+    (evil-collection-init))
 #+END_SRC
 
 ** General (Keybinding Package)
@@ -56,16 +62,25 @@ create keybindings
    "s"	'shell
 
    "t"	'(:ignore t :which-key "Toggles")
-   "tt"	'undo-tree-visualize
+   "tt"	'(undo-tree-visualize :wk "Undo Tree")
    "tf"	'(toggle-frame-fullscreen :wk "Fullscreen")
    "tF"	'auto-fill-mode
    "ts"	'(text-scale-adjust :wk "Font Size")
 
    "b"	'(:ignore t :which-key "Buffers")
    "bb"	'switch-to-buffer
-   "bd"	'kill-buffer-and-window
+   "bd"	'kill-this-buffer
+   "bD"	'kill-buffer
+   "bB" 	'switch-to-buffer
    "b]"	'next-buffer
-   "b["	'previous-buffer)
+   "b["	'previous-buffer
+   "w"	'(:ignore t :which-key "Window")
+   "ws"	'(split-window-vertically :which-key "Split V")
+   "wv"	'(split-window-horizontally :which-key "Split H")
+   "wq"	'(quit-window :which-key "Close Window")
+   "f"	'(:ignore t :which-key "Files")
+   "fD"	'(delete-file :which-key "Delete")
+   "fR"	'(rename-file :which-key "Rename"))
 
   (minor-definer
    :keymaps 'org-mode-map
@@ -76,7 +91,13 @@ create keybindings
    :keymaps 'org-src-mode-map
    "'"  'org-edit-src-exit
    )
+  (minor-definer
+   :keymaps 'shell-mode-map
+   "C-p"  'comint-previous-prompt
+   "C-n"	'comint-next-prompt
+   )
 #+end_src
+
 ** Auto Complete
 #+Begin_SRC emacs-lisp 
   ;(use-package auto-complete
@@ -96,23 +117,32 @@ Company
 #+end_src
 
 ** Helm
-A completion framework
 #+Begin_SRC emacs-lisp 
   (use-package helm
     :ensure t
     :general
     (main-definer
-      "f" 'helm-find-files
-      "a" 'helm-M-x)
+      "ff" '(helm-find-files :wk "Find File")
+      "bb"'(helm-mini :wk "Change Buffer")
+
+      "a" '(helm-M-x :wk "Apropos"))
     :config
+    (setq-default helm-boring-buffer-regexp-list
+		  '("\\` " "\\`\\*helm" "\\`\\*Echo Area" "\\`\\*Minibuf"
+		    "\\`\\*Messages*" "\\`\\*Backtrace*" "\\`\\*Help*"
+		    "\\`\\*dashboard*" "\\`\\*anaconda-mode*"))
     (helm-mode 1))
 #+END_SRC
+
+#+RESULTS:
+: t
+
 Manage projects easily, [[tuhdo.github.io/helm-projectile.html][guide]].
 #+Begin_SRC emacs-lisp 
   (use-package helm-projectile :ensure t
     :general
     (main-definer
-      "p"		'(:ignore t :which-key "Projectile")
+      "p"		'(:ignore t :which-key "Projects")
       "pp"	'(helm-projectile-switch-project :wk "Switch Project")
       "pf"	'(helm-projectile-find-file :wk "Find File")
       "pF"	'(helm-projectile-find-file-in-known-projects
@@ -210,7 +240,10 @@ use yas-describe-tables to view mode specific snippets.
       "y" 'yas-describe-tables)
     :config
     ;;(setq yas-snippet-dirs '("~/.emacs.d/snippets"))
+    (yas-reload-all)
     (yas-global-mode 1))
+  (use-package yasnippet-snippets
+    :ensure t)
 #+END_SRC
 
 snippet package
@@ -224,8 +257,6 @@ evil magit
     :general
     (main-definer
       "m" 'magit-status))
-  
-  (use-package evil-magit :ensure t)
 #+end_src
 git gutter
 
@@ -252,9 +283,6 @@ Code completion
 #+begin_src emacs-lisp
   (use-package anaconda-mode
     :ensure t
-    :general
-    (minor-definer
-      "a"	'pythonic-activate)
     :config
     (add-hook 'python-mode-hook 'anaconda-mode)
     (add-hook 'python-mode-hook 'anaconda-eldoc-mode))
@@ -269,16 +297,12 @@ Env setting
 
 Python mode keybindings
 #+begin_src emacs-lisp
-  (general-define-key
-   :states '(normal visual insert emacs)
-   :keymaps 'python-mode-map
-   :prefix ","
-   :non-normal-prefix "C-,"
-;   "a"    'pyvenv-activate
-   "p"    'run-python
-   "r"    'python-shell-send-region
-   "b"    'python-shell-send-buffer
-   )
+  (minor-definer
+    :keymaps 'python-mode-map
+    "p"	'run-python
+    "a"	'pythonic-activate
+    "r"	'python-shell-send-region
+    "b"	'python-shell-send-buffer)
 #+end_src
 
 Python Inferior keybindings
@@ -297,6 +321,41 @@ Python Inferior keybindings
    "i"    'comint-interrupt-subjob
    "x"    'comint-send-eof
    )
+#+end_src
+** Solidity
+  Solidity Mode
+#+begin_src emacs-lisp
+  (use-package solidity-mode
+    :ensure t
+    :init
+    (setq solidity-flycheck-solc-checker-active t))
+  (use-package solidity-flycheck
+    :defer t
+    :ensure t)
+  (use-package company-solidity
+    :ensure t
+    :config
+  (add-hook 'solidity-mode-hook
+	  (lambda ()
+	  (set (make-local-variable 'company-backends)
+		  (append '((company-solidity company-capf company-dabbrev-code))
+			  company-backends))))
+    )
+#+end_src
+** Typescript
+#+begin_src emacs-lisp
+  (use-package tide
+    :ensure t
+    :after (typescript-mode company flycheck)
+    :hook ((typescript-mode . tide-setup)
+	   (typescript-mode . tide-hl-identifier-mode)
+	   (before-save . tide-format-before-save)))
+  (minor-definer
+    :keymaps 'typescript-mode-map
+    "v"	'tide-verify-setup
+    "r"	'tide-refactor
+    "f"	'tide-references
+    "s"	'tide-rename-symbol)
 #+end_src
 ** Other
 Enforcing 80 characters in line for all buffers
@@ -430,10 +489,11 @@ backup undo tree
 #+END_SRC
 base16-harmonic-dark - nice for bright places
 ** Font
+   visit machine config
 #+BEGIN_SRC emacs-lisp 
-(set-face-attribute 'default nil
-		    :family "fira code"
-		    :height 200)
+  ;; (set-face-attribute 'default nil
+  ;; 		    :family "fira code"
+  ;; 		    :height 130)
 #+END_SRC
 ** Misc
 Remove default emacs menus
