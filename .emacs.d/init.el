@@ -9,7 +9,7 @@
  '(helm-minibuffer-history-key "M-p")
  '(package-selected-packages
    (quote
-    (tide yasnippet-snippets yapfify which-key vi-tilde-fringe use-package try spaceline smart-mode-line pyvenv pdf-tools paradox neotree magithub htmlize helm-projectile helm-company git-gutter-fringe general evil-anzu dracula-theme doom-modeline dashboard company-statistics company-solidity company-quickhelp company-anaconda column-enforce-mode benchmark-init base16-theme avy auto-complete))))
+    (evil-smartparens smartparens tide yasnippet-snippets yapfify which-key vi-tilde-fringe use-package try spaceline smart-mode-line pyvenv pdf-tools paradox neotree magithub htmlize helm-projectile helm-company git-gutter-fringe general evil-anzu dracula-theme doom-modeline dashboard company-statistics company-solidity company-quickhelp company-anaconda column-enforce-mode benchmark-init base16-theme avy auto-complete))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.

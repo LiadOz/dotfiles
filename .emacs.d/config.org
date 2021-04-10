@@ -19,6 +19,7 @@
     :init
     (setq evil-want-C-u-scroll t)
     (setq evil-want-keybinding nil)
+    (setq evil-undo-system 'undo-tree)
     :config
     (evil-mode))
   (use-package evil-collection
@@ -67,6 +68,9 @@ create keybindings
    "tF"	'auto-fill-mode
    "ts"	'(text-scale-adjust :wk "Font Size")
 
+   ";"	'(:ignore t :which-key "Untitled")
+   ";c"	'comment-line
+
    "b"	'(:ignore t :which-key "Buffers")
    "bb"	'switch-to-buffer
    "bd"	'kill-this-buffer
@@ -86,6 +90,7 @@ create keybindings
    :keymaps 'org-mode-map
    "'"	'org-edit-special
    "c"	'org-ctrl-c-ctrl-c
+   "t"	'org-todo
    )
   (minor-definer
    :keymaps 'org-src-mode-map
@@ -130,12 +135,12 @@ Company
     (setq-default helm-boring-buffer-regexp-list
 		  '("\\` " "\\`\\*helm" "\\`\\*Echo Area" "\\`\\*Minibuf"
 		    "\\`\\*Messages*" "\\`\\*Backtrace*" "\\`\\*Help*"
-		    "\\`\\*dashboard*" "\\`\\*anaconda-mode*"))
+		    "\\`\\*dashboard*" "\\`\\*anaconda-mode*" "\\`\\*tide-server*"
+		    "\\`\\magit"))
     (helm-mode 1))
 #+END_SRC
 
 #+RESULTS:
-: t
 
 Manage projects easily, [[tuhdo.github.io/helm-projectile.html][guide]].
 #+Begin_SRC emacs-lisp 
@@ -216,6 +221,16 @@ Settings for literate programming
     :general
     (main-definer
       "SPC" 'avy-goto-char-2))
+
+  (use-package smartparens
+    :ensure t
+    :config
+    (smartparens-global-mode))
+
+  (use-package evil-smartparens
+    :ensure t
+    :config
+    (add-hook 'smartparens-enabled-hook #'evil-smartparens-mode))
 
 #+END_SRC
 * Packages
@@ -425,6 +440,14 @@ makes sure you first use "all-the-icons-install" in a new computer
 #+begin_src emacs-lisp
   (use-package all-the-icons :ensure t)
 #+end_src
+
+org bullets
+#+begin_src emacs-lisp
+  (use-package org-bullets
+    :ensure t
+    :config
+    (add-hook 'org-mode-hook #'org-bullets-mode))
+#+end_src
 * Customization
 ** Backup
 backup every saved file
@@ -449,9 +472,9 @@ backup undo tree
 #+begin_src emacs-lisp
   (use-package smart-mode-line :ensure t
     :config (sml/setup)
-    (setq rm-blacklist '(" hl-p" " Helm" " ~" " Anzu" " GitGutter" " ARev"
-			 " yas" " WK" " compnay" " Undo-Tree" " Fill" " 80col"
-			 )))
+    (setq rm-blacklist
+	  '(" hl-p" " Helm" " ~" " Anzu" " GitGutter" " ARev" " yas" " WK" "
+    compnay" " Undo-Tree" " Fill" " 80col" " es" " SP"))) 
 #+end_src
 #+begin_src emacs-lisp
 ;;  (use-package spaceline-all-the-icons :ensure t
