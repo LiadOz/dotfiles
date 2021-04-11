@@ -1,5 +1,6 @@
 #+TITLE: Emacs Configuration
-#+description: Global config file
+#+DESCRIPTION: Global config file
+#+PROPERTY: header-args :results silent
 * Core
 ** Startup Benchmark
 #+BEGIN_SRC emacs-lisp
@@ -113,58 +114,127 @@ create keybindings
 Company
 #+begin_src emacs-lisp
   (use-package company :ensure t
-    :init
+    :config
     (add-hook 'after-init-hook 'global-company-mode))
   (use-package company-statistics :ensure t
-    :config (company-statistics-mode))
+    :config
+    (add-hook 'after-init-hook 'company-statistics-mode))
   (use-package company-quickhelp :ensure t
-    :config (company-quickhelp-mode))
+    :config
+    (add-hook 'after-init-hook 'company-quickhelp-mode))
 #+end_src
 
-** Helm
+** Helm REMOVED
 #+Begin_SRC emacs-lisp 
-  (use-package helm
-    :ensure t
-    :general
-    (main-definer
-      "ff" '(helm-find-files :wk "Find File")
-      "bb"'(helm-mini :wk "Change Buffer")
+  ;; (use-package helm
+  ;;   :ensure t
+  ;;   :general
+  ;;   (main-definer
+  ;;     "ff" '(helm-find-files :wk "Find File")
+  ;;     "bb"'(helm-mini :wk "Change Buffer")
 
-      "a" '(helm-M-x :wk "Apropos"))
-    :config
-    (setq-default helm-boring-buffer-regexp-list
-		  '("\\` " "\\`\\*helm" "\\`\\*Echo Area" "\\`\\*Minibuf"
-		    "\\`\\*Messages*" "\\`\\*Backtrace*" "\\`\\*Help*"
-		    "\\`\\*dashboard*" "\\`\\*anaconda-mode*" "\\`\\*tide-server*"
-		    "\\`\\magit"))
-    (helm-mode 1))
+  ;;     "a" '(helm-M-x :wk "Apropos"))
+  ;;   :config
+  ;;   (setq-default helm-boring-buffer-regexp-list
+  ;; 		'("\\` " "\\`\\*helm" "\\`\\*Echo Area" "\\`\\*Minibuf"
+  ;; 		  "\\`\\*Messages*" "\\`\\*Backtrace*" "\\`\\*Help*"
+  ;; 		  "\\`\\*dashboard*" "\\`\\*anaconda-mode*" "\\`\\*tide-server*"
+  ;; 		  "\\`\\magit"))
+  ;;   (helm-mode 1))
 #+END_SRC
-
-#+RESULTS:
 
 Manage projects easily, [[tuhdo.github.io/helm-projectile.html][guide]].
 #+Begin_SRC emacs-lisp 
-  (use-package helm-projectile :ensure t
-    :general
-    (main-definer
-      "p"		'(:ignore t :which-key "Projects")
-      "pp"	'(helm-projectile-switch-project :wk "Switch Project")
-      "pf"	'(helm-projectile-find-file :wk "Find File")
-      "pF"	'(helm-projectile-find-file-in-known-projects
-		    :wk "Find In All Projects")
-      "pb"	'(helm-projectile-switch-to-buffer :wk "Switch Buffer")
-      "pe"	'(helm-projectile-recentf :wk "Recent Files")
-      "pg"	'(helm-projectile-grep :wk "grep Project"))
-    :config
-    (projectile-global-mode)
-    (setq projectile-completion-system 'helm)
-    (helm-projectile-on))
+  ;; (use-package helm-projectile :ensure t
+  ;;   :general
+  ;;   (main-definer
+  ;;     "p"		'(:ignore t :which-key "Projects")
+  ;;     "pp"	'(helm-projectile-switch-project :wk "Switch Project")
+  ;;     "pf"	'(helm-projectile-find-file :wk "Find File")
+  ;;     "pF"	'(helm-projectile-find-file-in-known-projects
+  ;; 		  :wk "Find In All Projects")
+  ;;     "pb"	'(helm-projectile-switch-to-buffer :wk "Switch Buffer")
+  ;;     "pe"	'(helm-projectile-recentf :wk "Recent Files")
+  ;;     "pg"	'(helm-projectile-grep :wk "grep Project"))
+  ;;   :config
+  ;;   (projectile-global-mode)
+  ;;   (setq projectile-completion-system 'helm)
+  ;;   (helm-projectile-on))
 #+END_SRC
 Company
 #+begin_src emacs-lisp
-  (use-package helm-company :ensure t
+  ;; (use-package helm-company :ensure t
+  ;;   :general
+  ;;   ("C-;" 'helm-company))
+#+end_src
+** Ivy
+#+begin_src emacs-lisp
+  (use-package ivy
+    :ensure t
+    :config
+    (ivy-mode 1)
+    (setq enable-recursive-minibuffers t)
+    (setq ivy-count-format "(%d/%d) "))
+
+  (use-package swiper
+    :ensure t
+    :config
+    (setq ivy-use-virtual-buffers t)
+    (global-set-key "\C-s" 'swiper) ;; general doesn't work
+    )
+
+  (use-package counsel
+    :ensure t
+    :config
+    (add-to-list 'ibuffer-never-show-predicates "*Messages*")
+    (add-to-list 'ibuffer-never-show-predicates "*Backtrace*")
+    (add-to-list 'ibuffer-never-show-predicates "*Help*")
+    (add-to-list 'ibuffer-never-show-predicates "*dashboard*")
+    (add-to-list 'ibuffer-never-show-predicates "*anaconda-mode")
+    (add-to-list 'ibuffer-never-show-predicates "tide-server")
+    (add-to-list 'ibuffer-never-show-predicates "magit")
+    (add-to-list 'ibuffer-never-show-predicates "*scratch*")
     :general
-    ("C-;" 'helm-company))
+    (main-definer
+      "ff" '(counsel-find-file :wk "Find File")
+      "fr" '(counsel-recentf :wk "Recent File")
+
+      "pg" '(counsel-git-grep :wk "grep")
+
+      "a"  '(counsel-M-x :wk "Apropos")
+
+      "bo" '(counsel-switch-buffer-other-window :wk "Other Buffer")
+      "bb" '(counsel-ibuffer :wk "Switch Buffer")
+      "bt" '(ivy-toggle-ignore :wk "Toggle *")
+
+      ";u" '(counsel-unicode-char :wk "Insert Char"))
+    )
+
+  (use-package projectile
+    :ensure t
+    :config
+    (projectile-global-mode))
+
+  (use-package counsel-projectile
+    :ensure t
+    :config
+    (counsel-projectile-mode)
+    (setq projectile-completion-system 'ivy)
+    :general
+    (main-definer
+      "p"	 '(:ignore t :wk "Projects")
+      "pp" '(counsel-projectile-switch-project :wk "Switch Project")
+      "pf" '(counsel-projectile-find-file :wk "Find File")
+      "pb" '(counsel-projectile-switch-to-buffer :wk "Switch Buffer")
+      "pg" '(counsel-projectile-git-grep :wk "grep")
+      "pG" '(counsel-projectile-grep :wk "grep All")
+      )
+    )
+
+  (use-package ivy-posframe
+    :ensure t
+    :config
+    (ivy-posframe-mode 1))
 #+end_src
 ** Relative Line Numbers
 Set line numbers to hybrid
@@ -225,6 +295,7 @@ Settings for literate programming
   (use-package smartparens
     :ensure t
     :config
+    (require 'smartparens-config)
     (smartparens-global-mode))
 
   (use-package evil-smartparens
@@ -337,6 +408,11 @@ Python Inferior keybindings
    "x"    'comint-send-eof
    )
 #+end_src
+** Web
+#+begin_src emacs-lisp
+  (use-package web-mode
+    :ensure t)
+#+end_src
 ** Solidity
   Solidity Mode
 #+begin_src emacs-lisp
@@ -373,6 +449,12 @@ Python Inferior keybindings
     "s"	'tide-rename-symbol)
 #+end_src
 ** Other
+Better emacs defaults
+#+begin_src emacs-lisp
+  (use-package better-defaults
+    :ensure t)
+#+end_src
+
 Enforcing 80 characters in line for all buffers
 #+BEGIN_SRC emacs-lisp 
   (use-package column-enforce-mode
@@ -470,11 +552,11 @@ backup undo tree
 
 ** Modeline
 #+begin_src emacs-lisp
-  (use-package smart-mode-line :ensure t
-    :config (sml/setup)
-    (setq rm-blacklist
-	  '(" hl-p" " Helm" " ~" " Anzu" " GitGutter" " ARev" " yas" " WK" "
-    compnay" " Undo-Tree" " Fill" " 80col" " es" " SP"))) 
+    (use-package smart-mode-line :ensure t
+      :config (sml/setup)
+      (setq rm-blacklist
+	    '(" hl-p" " ivy" " ~" " Anzu" " GitGutter" " ARev" " yas" " WK"
+	      " company" " Undo-Tree" " Fill" " 80col" " es" " SP" " ivy-posframe"))) 
 #+end_src
 #+begin_src emacs-lisp
 ;;  (use-package spaceline-all-the-icons :ensure t
@@ -554,6 +636,6 @@ You can find what keymap is being for key by using C-h k and typing the key
 [[https://emacs.stackexchange.com/questions/13989/inferior-python-shell-slow-crash-on-long-lines][try this]]
 ** create modeline
 [[https://github.com/domtronn/all-the-icons.el/wiki/Mode-Line][this]] with [[https://github.com/Malabarba/smart-mode-line][that]]
-** remove minor modes from sml
+** DONE remove minor modes from sml
 * TODO issues
 ** backups don't work on main computer
