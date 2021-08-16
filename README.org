@@ -50,3 +50,7 @@
    #+BEGIN_SRC sh
    gpg --keyserver hkp://keyserver.ubuntu.com:80 --homedir ~/.emacs.d/elpa/gnupg --receive-keys 066DAFCB81E42C40
    #+END_SRC
+   
+* Emacs dependencies
+- yapf
+- jedi for completion

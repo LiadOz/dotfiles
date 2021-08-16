@@ -13,6 +13,12 @@
 (add-hook 'after-init-hook
     (lambda () (message "loaded in %s" (emacs-init-time))))
 #+END_SRC
+** Better defaults
+Better emacs defaults
+#+begin_src emacs-lisp
+  (use-package better-defaults
+    :ensure t)
+#+end_src
 ** Evil Mode
 #+BEGIN_SRC emacs-lisp
   (use-package evil
@@ -60,6 +66,7 @@ create keybindings
    "h"	(general-simulate-key "C-h")
    "u"	(general-simulate-key "C-u")
    "x"	(general-simulate-key "C-x")
+   "w"	(general-simulate-key "C-w")
 
    "s"	'shell
 
@@ -69,7 +76,7 @@ create keybindings
    "tF"	'auto-fill-mode
    "ts"	'(text-scale-adjust :wk "Font Size")
 
-   ";"	'(:ignore t :which-key "Untitled")
+   ";"	'(:ignore t :which-key "Text")
    ";c"	'comment-line
 
    "b"	'(:ignore t :which-key "Buffers")
@@ -79,10 +86,10 @@ create keybindings
    "bB" 	'switch-to-buffer
    "b]"	'next-buffer
    "b["	'previous-buffer
-   "w"	'(:ignore t :which-key "Window")
-   "ws"	'(split-window-vertically :which-key "Split V")
-   "wv"	'(split-window-horizontally :which-key "Split H")
-   "wq"	'(quit-window :which-key "Close Window")
+   ;; "w"	'(:ignore t :which-key "Window")
+   ;; "ws"	'(split-window-vertically :which-key "Split V")
+   ;; "wv"	'(split-window-horizontally :which-key "Split H")
+   ;; "wq"	'(quit-window :which-key "Close Window")
    "f"	'(:ignore t :which-key "Files")
    "fD"	'(delete-file :which-key "Delete")
    "fR"	'(rename-file :which-key "Rename"))
@@ -180,8 +187,9 @@ Company
     :ensure t
     :config
     (setq ivy-use-virtual-buffers t)
-    (global-set-key "\C-s" 'swiper) ;; general doesn't work
-    )
+    :general
+    (general-define-key
+     "C-s" 'swiper))
 
   (use-package counsel
     :ensure t
@@ -194,6 +202,8 @@ Company
     (add-to-list 'ibuffer-never-show-predicates "tide-server")
     (add-to-list 'ibuffer-never-show-predicates "magit")
     (add-to-list 'ibuffer-never-show-predicates "*scratch*")
+    (add-to-list 'ibuffer-never-show-predicates "*tide-references*")
+    (add-to-list 'ibuffer-never-show-predicates "*Flycheck error messages*")
     :general
     (main-definer
       "ff" '(counsel-find-file :wk "Find File")
@@ -232,9 +242,9 @@ Company
     )
 
   (use-package ivy-posframe
-    :ensure t
-    :config
-    (ivy-posframe-mode 1))
+    :ensure t)
+    ;; :config
+    ;; (ivy-posframe-mode 1))
 #+end_src
 ** Relative Line Numbers
 Set line numbers to hybrid
@@ -313,7 +323,14 @@ Syntax Checking
     (defun disable-flycheck-mode()
       (flycheck-mode -1))
     (add-hook 'org-src-mode-hook 'disable-flycheck-mode)
-    (global-flycheck-mode))
+    (global-flycheck-mode)
+    (flycheck-pos-tip-mode)
+    (main-definer
+      ";n" '(flycheck-next-error :wk "Next Error")
+      ";p" '(flycheck-previous-error :wk "Previous Error")
+      ";l" '(flycheck-list-errors :wk "List Errors")
+      )
+    )
   (use-package flycheck-pos-tip :ensure t)
 #+end_src
 ** YASnipet
@@ -362,7 +379,9 @@ Python Formatting (you must have yapf installed)
 #+begin_src emacs-lisp
   (use-package yapfify :ensure t
     :config
-    (add-hook 'python-mode-hook 'yapf-mode))
+    ;; enable to yapfify on save
+    ;;(add-hook 'python-mode-hook 'yapf-mode)
+    )
 #+end_src
 
 Code completion
@@ -387,8 +406,13 @@ Python mode keybindings
     :keymaps 'python-mode-map
     "p"	'run-python
     "a"	'pythonic-activate
-    "r"	'python-shell-send-region
-    "b"	'python-shell-send-buffer)
+    "s"	'python-shell-send-region
+    "b"	'python-shell-send-buffer
+    "y"	'yapfify-buffer
+    "u"	'yapfify-region
+    "r"	'anaconda-mode-find-references-other-window
+    "d"	'anaconda-mode-show-doc
+    )
 #+end_src
 
 Python Inferior keybindings
@@ -419,18 +443,21 @@ Python Inferior keybindings
   (use-package solidity-mode
     :ensure t
     :init
-    (setq solidity-flycheck-solc-checker-active t))
+    (setq solidity-flycheck-solc-checker-active t)
+    )
+
   (use-package solidity-flycheck
-    :defer t
-    :ensure t)
+    :ensure t
+    :config)
+
   (use-package company-solidity
     :ensure t
     :config
   (add-hook 'solidity-mode-hook
-	  (lambda ()
-	  (set (make-local-variable 'company-backends)
-		  (append '((company-solidity company-capf company-dabbrev-code))
-			  company-backends))))
+          (lambda ()
+          (set (make-local-variable 'company-backends)
+                  (append '((company-solidity company-capf company-dabbrev-code))
+                          company-backends))))
     )
 #+end_src
 ** Typescript
@@ -449,12 +476,6 @@ Python Inferior keybindings
     "s"	'tide-rename-symbol)
 #+end_src
 ** Other
-Better emacs defaults
-#+begin_src emacs-lisp
-  (use-package better-defaults
-    :ensure t)
-#+end_src
-
 Enforcing 80 characters in line for all buffers
 #+BEGIN_SRC emacs-lisp 
   (use-package column-enforce-mode
@@ -530,7 +551,26 @@ org bullets
     :config
     (add-hook 'org-mode-hook #'org-bullets-mode))
 #+end_src
+
+comments 
+#+begin_src emacs-lisp
+  (use-package evil-nerd-commenter
+    :ensure t
+    :config
+    :general
+    (main-definer
+      "ti"	'evilnc-comment-or-uncomment-lines
+      "tc"	'evilnc-copy-and-comment-lines))
+#+end_src
 * Customization
+** Text
+   rainbow brackets
+#+begin_src emacs-lisp
+  (use-package rainbow-delimiters
+    :ensure t
+    :config
+    (add-hook 'prog-mode-hook #'rainbow-delimiters-mode))
+#+end_src
 ** Backup
 backup every saved file
 #+begin_src emacs-lisp
