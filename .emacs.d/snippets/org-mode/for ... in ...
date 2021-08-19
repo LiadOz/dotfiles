@@ -1,0 +1,6 @@
+# -*- mode: snippet -*-
+# name: for ... in ...
+# key: forme
+# --
+for x in ${ttt}:
+	pass

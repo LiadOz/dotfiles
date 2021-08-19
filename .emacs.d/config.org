@@ -83,7 +83,7 @@ create keybindings
    "bb"	'switch-to-buffer
    "bd"	'kill-this-buffer
    "bD"	'kill-buffer
-   "bB" 	'switch-to-buffer
+   "bb" 	'switch-to-buffer
    "b]"	'next-buffer
    "b["	'previous-buffer
    ;; "w"	'(:ignore t :which-key "Window")
@@ -122,7 +122,9 @@ Company
 #+begin_src emacs-lisp
   (use-package company :ensure t
     :config
-    (add-hook 'after-init-hook 'global-company-mode))
+    (add-hook 'after-init-hook 'global-company-mode)
+    (setq company-idle-delay 0)
+    (setq company-show-numbers t))
   (use-package company-statistics :ensure t
     :config
     (add-hook 'after-init-hook 'company-statistics-mode))
@@ -130,7 +132,13 @@ Company
     :config
     (add-hook 'after-init-hook 'company-quickhelp-mode))
 #+end_src
-
+TabNine backend
+#+begin_src emacs-lisp
+  ;; (use-package company-tabnine
+  ;;   :ensure t
+  ;;   :config
+  ;;   (add-to-list 'company-backends #'company-tabnine))
+#+end_src
 ** Helm REMOVED
 #+Begin_SRC emacs-lisp 
   ;; (use-package helm
@@ -194,16 +202,9 @@ Company
   (use-package counsel
     :ensure t
     :config
-    (add-to-list 'ibuffer-never-show-predicates "*Messages*")
-    (add-to-list 'ibuffer-never-show-predicates "*Backtrace*")
-    (add-to-list 'ibuffer-never-show-predicates "*Help*")
-    (add-to-list 'ibuffer-never-show-predicates "*dashboard*")
-    (add-to-list 'ibuffer-never-show-predicates "*anaconda-mode")
     (add-to-list 'ibuffer-never-show-predicates "tide-server")
     (add-to-list 'ibuffer-never-show-predicates "magit")
-    (add-to-list 'ibuffer-never-show-predicates "*scratch*")
-    (add-to-list 'ibuffer-never-show-predicates "*tide-references*")
-    (add-to-list 'ibuffer-never-show-predicates "*Flycheck error messages*")
+    (setq ivy-ignore-buffers '("\\` " "\\`\\*"))
     :general
     (main-definer
       "ff" '(counsel-find-file :wk "Find File")
@@ -214,7 +215,7 @@ Company
       "a"  '(counsel-M-x :wk "Apropos")
 
       "bo" '(counsel-switch-buffer-other-window :wk "Other Buffer")
-      "bb" '(counsel-ibuffer :wk "Switch Buffer")
+      "bB" '(counsel-ibuffer :wk "Switch All Buffers")
       "bt" '(ivy-toggle-ignore :wk "Toggle *")
 
       ";u" '(counsel-unicode-char :wk "Insert Char"))
@@ -435,7 +436,44 @@ Python Inferior keybindings
 ** Web
 #+begin_src emacs-lisp
   (use-package web-mode
+    :ensure t
+    :mode ("\\.ejs\\'" "\\.hbs\\'" "\\.html\\'" "\\.php\\'" "\\.[jt]sx?\\'")
+    :config
+    (setq web-mode-content-types-alist '(("jsx" . "\\.[jt]sx?\\'")))
+    (setq web-mode-markup-indent-offset 2)
+    (setq web-mode-css-indent-offset 2)
+    (setq web-mode-code-indent-offset 2)
+    (setq web-mode-script-padding 2)
+    (setq web-mode-block-padding 2)
+    (setq web-mode-style-padding 2)
+    (setq web-mode-enable-current-element-highlight t))
+  (use-package rjsx-mode
     :ensure t)
+#+end_src
+#+begin_src emacs-lisp
+  (defun my/activate-tide-mode ()
+    "Use hl-identifier-mode only on js or ts buffers."
+    (when (and (stringp buffer-file-name)
+               (string-match "\\.[tj]sx?\\'" buffer-file-name))
+          (tide-setup)
+
+          (tide-hl-identifier-mode)))
+
+  (use-package tide
+    :ensure t
+    :after (typescript-mode company flycheck)
+    :hook ((web-mode . my/activate-tide-mode)
+           (before-save . tide-format-before-save)))
+  (minor-definer
+    :keymaps 'typescript-mode-map
+    "v"	'tide-verify-setup
+    "r"	'tide-refactor
+    "f"	'tide-references
+    "s"	'tide-rename-symbol)
+#+end_src
+#+begin_src emacs-lisp
+  ;; (use-package typescript-mode
+  ;;   :ensure t)
 #+end_src
 ** Solidity
   Solidity Mode
@@ -459,21 +497,6 @@ Python Inferior keybindings
                   (append '((company-solidity company-capf company-dabbrev-code))
                           company-backends))))
     )
-#+end_src
-** Typescript
-#+begin_src emacs-lisp
-  (use-package tide
-    :ensure t
-    :after (typescript-mode company flycheck)
-    :hook ((typescript-mode . tide-setup)
-	   (typescript-mode . tide-hl-identifier-mode)
-	   (before-save . tide-format-before-save)))
-  (minor-definer
-    :keymaps 'typescript-mode-map
-    "v"	'tide-verify-setup
-    "r"	'tide-refactor
-    "f"	'tide-references
-    "s"	'tide-rename-symbol)
 #+end_src
 ** Other
 Enforcing 80 characters in line for all buffers
@@ -559,8 +582,8 @@ comments
     :config
     :general
     (main-definer
-      "ti"	'evilnc-comment-or-uncomment-lines
-      "tc"	'evilnc-copy-and-comment-lines))
+      ";i"	'evilnc-comment-or-uncomment-lines
+      ";c"	'evilnc-copy-and-comment-lines))
 #+end_src
 * Customization
 ** Text
