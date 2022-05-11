@@ -16,5 +16,5 @@
 !.emacs.d/config.org
 !.emacs.d/machine_config.template
 !.emacs.d/snippets/**/*
-!.config/nvim
+!.config/nvim/**/*
 !.config/pudb
