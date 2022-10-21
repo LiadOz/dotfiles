@@ -9,6 +9,7 @@ done
 INSTALL_DIR=~/test_dotfiles
 
 
+git submodule update --init --recursive
 mkdir -p "$INSTALL_DIR/.config"
 link_strings=(".config/pudb" ".config/nvim" ".emacs.d" ".gdbinit" ".spacemacs" ".tmux.conf" ".vim" ".zsh_defaults.sh")
 for link_name in ${link_strings[@]}; do
