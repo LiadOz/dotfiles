@@ -1,12 +1,13 @@
+#!/bin/bash
 echo "This installs this repository into the home directory."
 echo "Do you wish to run the script? "
 select yn in "Yes" "No"; do
     case $yn in
         Yes ) break;;
-        No ) return 0;;
+        No ) exit;;
     esac
 done
-INSTALL_DIR=~/test_dotfiles
+INSTALL_DIR=~
 
 
 git submodule update --init --recursive
@@ -18,7 +19,21 @@ for link_name in ${link_strings[@]}; do
 		echo "$link_path not found!"
 		continue
 	fi
-	ln -fs $link_path "$INSTALL_DIR/$link_name"
+	PREV=""
+	FOLDER=""
+	# Parse path
+	IFS="/" read -ra FILE_PATH <<< "$link_name"
+	for CURR in "${FILE_PATH[@]}"; do
+		if [ -n "$PREV" ]; then
+			if [ -n "$FOLDER" ]; then
+				FOLDER="$FOLDER/$PREV"
+			else
+				FOLDER="$PREV"
+			fi
+		fi
+		PREV="$CURR"
+	done
+	ln -fvs $link_path "$INSTALL_DIR/$FOLDER"
 done
 
 # zsh extra setup
@@ -27,7 +42,7 @@ echo "Proceed with adding zsh defaults? "
 select yn in "Yes" "No"; do
     case $yn in
         Yes ) break;;
-        No ) return 0;;
+        No ) exit;;
     esac
 done
 echo "source $PWD/.zsh_defaults.sh" >> "$INSTALL_DIR/.zshrc"
