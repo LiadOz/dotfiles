@@ -1,0 +1,9 @@
+#!/bin/bash
+debug_path=$(command -v $1)
+if [ -z "$debug_path" ]
+then
+	debug_path=$1
+fi
+shift
+nvim --server /tmp/neovim_debug_pipe --remote-send ":lua require('debug_config').remote_continue()<CR>"
+~/.local/share/nvim/mason/bin/debugpy --listen 127.0.0.1:1337 --wait-for-client $debug_path $@
