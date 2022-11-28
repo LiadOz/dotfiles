@@ -6,4 +6,4 @@ then
 fi
 shift
 nvim --server /tmp/neovim_debug_pipe --remote-send ":lua require('debug_config').remote_continue()<CR>"
-~/.local/share/nvim/mason/bin/debugpy --listen 127.0.0.1:1337 --wait-for-client $debug_path $@
+python -m debugpy --listen 127.0.0.1:1337 --wait-for-client $debug_path $@
