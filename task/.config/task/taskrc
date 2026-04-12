@@ -1,27 +1,8 @@
-# [Created by task 2.6.1 11/20/2025 22:33:37]
-# Taskwarrior program configuration file.
-# For more documentation, see https://taskwarrior.org or try 'man task', 'man task-color',
-# 'man task-sync' or 'man taskrc'
+# Taskwarrior 3.0 configuration
 
-# Here is an example of entries that use the default, override and blank values
-#   variable=foo   -- By specifying a value, this overrides the default
-#   variable=      -- By specifying no value, this means no default
-#   #variable=foo  -- By commenting out the line, or deleting it, this uses the default
-
-# You can also refence environment variables:
-#   variable=$HOME/task
-#   variable=$VALUE
-
-# Use the command 'task show' to see all defaults and overrides
-
-# Files
-data.location=/home/ozonzono/.task
-
-# To use the default location of the XDG directories,
-# move this configuration file from ~/.taskrc to ~/.config/task/taskrc and uncomment below
-
-#data.location=~/.local/share/task
-#hooks.location=~/.config/task/hooks
+# XDG Base Directory paths
+data.location=~/.local/share/task
+hooks.location=~/.config/task/hooks
 
 # Color theme (uncomment one to use)
 #include light-16.theme
@@ -39,8 +20,7 @@ data.location=/home/ozonzono/.task
 #include solarized-light-256.theme
 #include no-color.theme
 
-news.version=2.6.0
-
+# Custom reports
 report.in.columns           = id,description
 report.in.description       = Inbox
 report.in.filter            = status:pending limit:page (+in)

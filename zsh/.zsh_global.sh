@@ -10,7 +10,7 @@ echo " ╚═════╝ ╚══════╝ ╚═════╝ ╚�
 PATH="$HOME/.local/bin:$PATH"
 
 # GTD stuff (taskwarrior)
-if command -v task &> /dev/null && [ -f "$HOME/.taskrc" ]; then
+if command -v task &> /dev/null && [ -f "$HOME/.config/task/taskrc" ]; then
     alias in='task add +in'
     export PS1='$(c=$(task +in +PENDING count); [ "$c" -gt 0 ] && printf "%s " "$c")'"$PS1"
     tickle () {
