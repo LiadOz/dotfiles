@@ -47,8 +47,16 @@ OPTIONS = ("@agent_state", "@agent_title", "@agent_kind", "@agent_cwd",
 _branches = {}  # cwd -> (branch, when)
 
 
+def remove(path):
+    """Path.unlink(missing_ok=True) is 3.8+; tlv runs python 3.6."""
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
 def tmux(*args):
-    return subprocess.run(("tmux",) + args, capture_output=True, text=True,
+    return subprocess.run(("tmux",) + args, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, universal_newlines=True,
                           check=False)
 
 
@@ -73,7 +81,8 @@ def branch(path):
         return cached
     head = subprocess.run(
         ("git", "-C", path, "rev-parse", "--abbrev-ref", "HEAD"),
-        capture_output=True, text=True, check=False,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        universal_newlines=True, check=False,
     )
     name = head.stdout.strip() if head.returncode == 0 else ""
     _branches[path] = (name, time.time())
@@ -119,7 +128,7 @@ def sync_once(decorated):
             continue
 
         if slot not in live:
-            path.unlink(missing_ok=True)  # window is gone for good
+            remove(path)  # window is gone for good
             continue
 
         # Visiting the window is what clears a `done` marker. Deliberately

@@ -38,6 +38,13 @@ EVENTS = {
 }
 
 
+def remove(path):
+    """Path.unlink(missing_ok=True) is 3.8+; tlv runs python 3.6."""
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
 def slot_from_tmux():
     """Derive the window when the agent runs on the same machine as tmux.
 
@@ -50,7 +57,8 @@ def slot_from_tmux():
         return ""
     found = subprocess.run(
         ("tmux", "display-message", "-p", "-t", pane, "#{window_id}"),
-        capture_output=True, text=True, check=False,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        universal_newlines=True, check=False,
     )
     return found.stdout.strip() if found.returncode == 0 else ""
 
@@ -115,7 +123,7 @@ def cmd_hook(args):
     event = data.get("hook_event_name") or data.get("type", "")
 
     if event in ("SessionEnd", "agent-turn-end"):
-        path().unlink(missing_ok=True)
+        remove(path())
         return
 
     # codex's older notify path only ever reports turn completion
@@ -228,7 +236,7 @@ def cmd_agent(args):
 
 
 def cmd_clear(_args):
-    path().unlink(missing_ok=True)
+    remove(path())
 
 
 COMMANDS = {"hook": cmd_hook, "title": cmd_title,

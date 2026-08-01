@@ -110,7 +110,8 @@ def name_under(pane_pid, children, named):
 
 
 def tmux(*args):
-    return subprocess.run(("tmux",) + args, capture_output=True, text=True,
+    return subprocess.run(("tmux",) + args, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, universal_newlines=True,
                           check=False)
 
 
@@ -145,7 +146,8 @@ def branch(path):
         return ""
     head = subprocess.run(
         ("git", "-C", path, "rev-parse", "--abbrev-ref", "HEAD"),
-        capture_output=True, text=True, check=False,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        universal_newlines=True, check=False,
     )
     return head.stdout.strip() if head.returncode == 0 else ""
 
@@ -164,14 +166,16 @@ def diffstat(path):
     for candidate in BASES:
         found = subprocess.run(
             ("git", "-C", path, "merge-base", "HEAD", candidate),
-            capture_output=True, text=True, check=False,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            universal_newlines=True, check=False,
         )
         if found.returncode == 0 and found.stdout.strip():
             base = found.stdout.strip()
             break
     numstat = subprocess.run(
         ("git", "-C", path, "diff", "--numstat", base),
-        capture_output=True, text=True, check=False,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        universal_newlines=True, check=False,
     )
     if numstat.returncode != 0:
         return 0, 0
@@ -251,7 +255,7 @@ def main():
          "--header=BLOCK needs you   DONE unseen   WORK running   (ctrl-/ hides preview)",
          "--preview", PREVIEW, "--preview-window", "right:55%:wrap",
          "--bind", "ctrl-/:toggle-preview"),
-        input="\n".join(render(rows)), stdout=subprocess.PIPE, text=True,
+        input="\n".join(render(rows)), stdout=subprocess.PIPE, universal_newlines=True,
         check=False,
     )
     if fzf.returncode != 0 or not fzf.stdout.strip():
