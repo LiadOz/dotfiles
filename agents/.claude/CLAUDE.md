@@ -21,3 +21,20 @@ Good:  Please push  user/foo
 Good:  Branch: user/foo
 Bad:   Please push user/foo.
 ```
+
+## Naming your session
+
+I run several agents at once and identify them by name, so a session called
+after its opening prompt is no use once the work has moved on.
+
+Once you know what you are actually working on, run:
+
+    agent-state name '<short description>'
+
+Under about 40 characters, lowercase, no trailing punctuation. Run it again
+whenever the work changes enough that the old name misleads -- a stale name
+is worse than none.
+
+Then tell me, in one short line, what you named it. I may rename the session
+itself to match, so the two stay consistent. Do not rename the session
+yourself.

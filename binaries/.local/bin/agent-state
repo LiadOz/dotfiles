@@ -147,6 +147,27 @@ def payload(args):
     return {}
 
 
+UUID_CHARS = set("0123456789abcdef-")
+
+
+def thread_id(data):
+    """The conversation id, whatever this agent calls it.
+
+    codex has used thread-id, thread_id and conversation_id across versions,
+    so match on shape rather than pinning one spelling: an id-ish key whose
+    value looks like a uuid.
+    """
+    for key, value in data.items():
+        if not isinstance(value, str) or len(value) < 32:
+            continue
+        if not set(value.lower()) <= UUID_CHARS:
+            continue
+        low = key.lower().replace("-", "_")
+        if any(w in low for w in ("thread", "conversation", "session")):
+            return value
+    return ""
+
+
 def cmd_hook(args):
     global _hook_owner
     # Which agent this is has to be told to us: no hook payload identifies
@@ -173,7 +194,8 @@ def cmd_hook(args):
         # Fresh agent in this slot. Drop whatever the last occupant left --
         # this is what makes ctrl-C and relaunch reset the window cleanly.
         save({"state": "idle", "since": int(time.time()),
-              "agent": kind, "cwd": data.get("cwd", "")})
+              "agent": kind, "cwd": data.get("cwd", ""),
+              "thread": thread_id(data)})
         return
 
     # PostToolUse fires on every tool call, so keep it cheap: it exists only
@@ -192,7 +214,8 @@ def cmd_hook(args):
             guess = title_from_prompt(data)
             if guess:
                 extra = {"title": guess, "title_by": "prompt"}
-    set_state(state, agent=kind, cwd=data.get("cwd", ""), **extra)
+    set_state(state, agent=kind, cwd=data.get("cwd", ""),
+              thread=thread_id(data), **extra)
 
 
 def session_name(session_id):
@@ -273,7 +296,7 @@ def cmd_clear(_args):
     remove(path())
 
 
-COMMANDS = {"hook": cmd_hook, "title": cmd_title,
+COMMANDS = {"hook": cmd_hook, "title": cmd_title, "name": cmd_title,
             "agent": cmd_agent, "clear": cmd_clear}
 
 

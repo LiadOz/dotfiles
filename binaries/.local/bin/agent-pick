@@ -7,8 +7,10 @@ whoever needs you is at the top. Within the finished group the one that just
 finished sits above the one that finished an hour ago, so the bottom of that
 group is the work that has been waiting longest.
 """
+import glob
 import json
 import os
+import sqlite3
 import pathlib
 import subprocess
 import sys
@@ -45,6 +47,11 @@ BASES = ("origin/master", "origin/main", "master", "main")
 # name from /rename.
 CLAUDE_SESSIONS = pathlib.Path.home() / ".claude/sessions"
 
+# codex keeps thread titles in sqlite rather than one file per session, and
+# renaming a thread fires no hook -- so the title has to be read live, the
+# same way claude's is.
+CODEX_STATE = str(pathlib.Path.home() / ".codex/state_*.sqlite")
+
 # Live view of the highlighted window, so a permission prompt can be read
 # without leaving the picker. {1} is the window id, the hidden first field.
 # The awk trims trailing blank lines: a pane is usually mostly empty below
@@ -77,6 +84,24 @@ def session_names():
                 and record.get("nameSource") != "derived"):
             named[int(record["pid"])] = record["name"]
     return named
+
+
+def codex_title(thread):
+    """Live title of a codex thread, from the newest state database."""
+    if not thread:
+        return ""
+    databases = sorted(glob.glob(CODEX_STATE))
+    if not databases:
+        return ""
+    try:
+        # read-only: codex is writing to this, WAL and all.
+        con = sqlite3.connect("file:%s?mode=ro" % databases[-1], uri=True)
+        row = con.execute(
+            "SELECT title FROM threads WHERE id = ?", (thread,)).fetchone()
+        con.close()
+    except sqlite3.Error:
+        return ""
+    return (row[0] or "")[:44] if row else ""
 
 
 def child_pids():
@@ -215,7 +240,10 @@ def collect():
             rank, icon, colour = STATES.get(record.get("state", ""), STATES["idle"])
             # Live name first: a stored title is a snapshot and goes stale
             # the moment you /rename.
+            # Live name first, per agent: a stored title is a snapshot and
+            # goes stale the moment the session is renamed.
             label = (name_under(int(pane_pid), children, named)
+                     or codex_title(record.get("thread", ""))
                      or record.get("title") or name)
             head = branch(record.get("cwd", ""))
             added, removed = diffstat(record.get("cwd", ""))
