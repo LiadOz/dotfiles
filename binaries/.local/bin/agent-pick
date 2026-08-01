@@ -17,6 +17,13 @@ import sys
 # means nothing on another host.
 STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
 
+# Field separator for tmux -F output. Not a tab: the tmux build on tlv
+# replaces tabs in -F output with underscores, so every line parsed as a
+# single field, both scripts saw zero windows, and the whole thing was
+# silently inert there. A printable multi-character token survives that and
+# will not occur in a window name, a title taken from a prompt, or a branch.
+SEP = ":::"
+
 # state -> (rank, icon, colour)
 STATES = {
     "blocked": (0, "BLOCK", "\033[31;1m"),      # needs you
@@ -117,14 +124,15 @@ def tmux(*args):
 
 def tmux_windows():
     result = tmux("list-windows", "-a", "-F",
-                  "#{window_id}\t#{session_name}\t#{window_index}\t"
-                  "#{window_name}\t#{window_active}\t#{pane_current_command}\t"
-                  "#{pane_pid}")
+                  SEP.join(("#{window_id}", "#{session_name}",
+                            "#{window_index}", "#{window_name}",
+                            "#{window_active}", "#{pane_current_command}",
+                            "#{pane_pid}")))
     if result.returncode != 0:
         sys.exit("agent-pick: no tmux server")
     found = {}
     for line in result.stdout.splitlines():
-        parts = line.split("\t")
+        parts = line.split(SEP)
         if len(parts) == 7:
             found[parts[0]] = parts[1:]
     return found
@@ -232,7 +240,7 @@ def render(rows):
         label = row["label"][:width].ljust(width)
         here = "‹" if row["active"] else " "
         lines.append(
-            f"{row['slot']}\t{row['colour']}{row['icon']}{RESET}"
+            f"{row['slot']}{SEP}{row['colour']}{row['icon']}{RESET}"
             f"{here} {row['colour']}{label}{RESET}  "
             f"{DIM}{row['index']}  {row['branch']}{RESET}"
             + (f"  {GREEN}+{row['added']}{RESET} {RED}-{row['removed']}{RESET}"
@@ -250,7 +258,7 @@ def main():
     # so capturing that sends the whole UI into a pipe and the popup shows
     # nothing at all.
     fzf = subprocess.run(
-        ("fzf", "--ansi", "--reverse", "--delimiter=\t", "--with-nth=2..",
+        ("fzf", "--ansi", "--reverse", "--delimiter=" + SEP, "--with-nth=2..",
          "--no-sort", "--info=inline", "--prompt=window › ",
          "--header=BLOCK needs you   DONE unseen   WORK running   (ctrl-/ hides preview)",
          "--preview", PREVIEW, "--preview-window", "right:55%:wrap",
@@ -261,7 +269,7 @@ def main():
     if fzf.returncode != 0 or not fzf.stdout.strip():
         return
 
-    slot = fzf.stdout.split("\t", 1)[0].strip()
+    slot = fzf.stdout.split(SEP, 1)[0].strip()
     session = tmux("display-message", "-p", "-t", slot, "#{session_name}")
     if session.stdout.strip():
         tmux("switch-client", "-t", session.stdout.strip())

@@ -41,6 +41,13 @@ import time
 STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
 INTERVAL = float(os.environ.get("AGENT_SYNC_INTERVAL", "2"))
 BRANCH_TTL = 30  # a worktree's branch rarely changes; don't run git every cycle
+# Field separator for tmux -F output. Not a tab: the tmux build on tlv
+# replaces tabs in -F output with underscores, so every line parsed as a
+# single field, both scripts saw zero windows, and the whole thing was
+# silently inert there. A printable multi-character token survives that and
+# will not occur in a window name, a title taken from a prompt, or a branch.
+SEP = ":::"
+
 OPTIONS = ("@agent_state", "@agent_title", "@agent_kind", "@agent_cwd",
            "@agent_branch")
 
@@ -62,12 +69,13 @@ def tmux(*args):
 
 def windows():
     """window_id -> is it the active window of its session"""
-    result = tmux("list-windows", "-a", "-F", "#{window_id}\t#{window_active}")
+    result = tmux("list-windows", "-a", "-F",
+                  SEP.join(("#{window_id}", "#{window_active}")))
     if result.returncode != 0:
         return None
     found = {}
     for line in result.stdout.splitlines():
-        parts = line.split("\t")
+        parts = line.split(SEP)
         if len(parts) == 2:
             found[parts[0]] = parts[1] == "1"
     return found
