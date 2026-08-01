@@ -213,8 +213,7 @@ def cmd_hook(args):
         elif event == "UserPromptSubmit" and load().get("title_by") != "agent":
             guess = title_from_prompt(data)
             if guess:
-                extra = {"title": guess, "title_by": "prompt",
-                     "prompt_title": guess}
+                extra = {"title": guess, "title_by": "prompt"}
     set_state(state, agent=kind, cwd=data.get("cwd", ""),
               thread=thread_id(data), **extra)
 
