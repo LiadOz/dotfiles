@@ -13,3 +13,6 @@
 /binaries/.local/bin/kitty
 /binaries/.local/bin/nvim
 /binaries/.local/bin/pylsp
+
+# Taskwarrior secrets and per-machine settings (see the include in taskrc).
+/task/.config/task/taskrc.local

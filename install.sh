@@ -30,6 +30,11 @@ for PKG in binaries gdb nvim tmux zsh colordiff task agents; do
   fi
   rm -f /tmp/stow-$PKG.err
 done
+# taskwarrior errors on an include it cannot read, so guarantee the file
+# exists. Secrets live here and never in the tracked taskrc.
+TASKRC_LOCAL="$HOME/.config/task/taskrc.local"
+[ -f "$TASKRC_LOCAL" ] || : > "$TASKRC_LOCAL"
+
 SOURCE_STR="source $HOME/.zsh_global.sh"
 ZSH_FILE="$HOME/.zshrc"
 grep -q "$SOURCE_STR" "$ZSH_FILE" || echo "$SOURCE_STR" >> "$ZSH_FILE"

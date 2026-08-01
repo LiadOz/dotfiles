@@ -25,3 +25,10 @@ report.in.columns           = id,description
 report.in.description       = Inbox
 report.in.filter            = status:pending limit:page (+in)
 report.in.labels            = ID,Description
+
+# Machine-specific settings and anything secret -- sync credentials, the
+# encryption secret, certificate paths. Kept out of this repo: taskrc is
+# tracked and the repo is public, so a routine `git add -A` would publish
+# them. install.sh creates the file if it is missing; taskwarrior errors on
+# an include it cannot read.
+include /home/loz/.config/task/taskrc.local
