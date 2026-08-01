@@ -34,6 +34,7 @@ done
 # exists. Secrets live here and never in the tracked taskrc.
 TASKRC_LOCAL="$HOME/.config/task/taskrc.local"
 [ -f "$TASKRC_LOCAL" ] || : > "$TASKRC_LOCAL"
+chmod 600 "$TASKRC_LOCAL"
 
 SOURCE_STR="source $HOME/.zsh_global.sh"
 ZSH_FILE="$HOME/.zshrc"
