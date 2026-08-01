@@ -31,9 +31,18 @@ Once you know what you are actually working on, run:
 
     agent-state name '<short description>'
 
-Under about 40 characters, lowercase, no trailing punctuation. Run it again
-whenever the work changes enough that the old name misleads -- a stale name
-is worse than none.
+Under about 40 characters, lowercase, no trailing punctuation.
+
+Then keep it. The name is how I find this session again, so it should stay
+recognisable for as long as we are on the same task. Treat renaming as the
+exception, not something to revisit each turn.
+
+- Do not rename for a subtask, a new file, a detour, or a bug found on the
+  way. Those are all still the same job.
+- Refining is fine as understanding improves, as long as the name stays
+  recognisably the same thing: "fix picker" -> "fix picker rendering".
+- Rename properly only when the task itself has genuinely been replaced --
+  we finished, or you were redirected onto unrelated work.
 
 Then tell me, in one short line, what you named it. I may rename the session
 itself to match, so the two stay consistent. Do not rename the session
