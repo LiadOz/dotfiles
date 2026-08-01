@@ -238,7 +238,7 @@ def render(rows):
     lines = []
     for row in rows:
         label = row["label"][:width].ljust(width)
-        here = "‹" if row["active"] else " "
+        here = ">" if row["active"] else " "
         lines.append(
             f"{row['slot']}{SEP}{row['colour']}{row['icon']}{RESET}"
             f"{here} {row['colour']}{label}{RESET}  "
@@ -259,7 +259,7 @@ def main():
     # nothing at all.
     fzf = subprocess.run(
         ("fzf", "--ansi", "--reverse", "--delimiter=" + SEP, "--with-nth=2..",
-         "--no-sort", "--info=inline", "--prompt=window › ",
+         "--no-sort", "--info=inline", "--prompt=window > ",
          "--header=BLOCK needs you   DONE unseen   WORK running   (ctrl-/ hides preview)",
          "--preview", PREVIEW, "--preview-window", "right:55%:wrap",
          "--bind", "ctrl-/:toggle-preview"),
