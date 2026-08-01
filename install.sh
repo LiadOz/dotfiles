@@ -14,7 +14,22 @@ git submodule update --remote --merge
 git submodule foreach --recursive git checkout master
 
 chmod u+x binaries/.local/bin/*
-stow binaries gdb nvim tmux zsh colordiff task agents
+# One package at a time: `stow a b c` is atomic, so a single conflict aborts
+# every package and nothing at all gets installed.
+#
+# --no-folding keeps target directories real instead of letting stow replace
+# one with a symlink into this repo. That is what lets ~/.local/bin and
+# ~/.codex stay yours, holding machine-specific links alongside the ones
+# this repo provides, on every machine.
+for PKG in binaries gdb nvim tmux zsh colordiff task agents; do
+  if stow --no-folding "$PKG" 2>/tmp/stow-$PKG.err; then
+    echo "stow: $PKG"
+  else
+    echo "stow: $PKG SKIPPED"
+    sed 's/^/  /' /tmp/stow-$PKG.err
+  fi
+  rm -f /tmp/stow-$PKG.err
+done
 SOURCE_STR="source $HOME/.zsh_global.sh"
 ZSH_FILE="$HOME/.zshrc"
 grep -q "$SOURCE_STR" "$ZSH_FILE" || echo "$SOURCE_STR" >> "$ZSH_FILE"
