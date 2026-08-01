@@ -1,0 +1,268 @@
+#!/usr/bin/env python3
+"""fzf window picker, agent-aware. Bound to prefix f, inside display-popup.
+
+Lists every window, so this is the only switcher you need. Agent windows
+sort above ordinary ones, and among the agents the ordering is the point:
+whoever needs you is at the top. Within the finished group the one that just
+finished sits above the one that finished an hour ago, so the bottom of that
+group is the work that has been waiting longest.
+"""
+import json
+import os
+import pathlib
+import subprocess
+import sys
+
+# XDG state directory: machine-local data that should survive a reboot but
+# means nothing on another host.
+STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
+
+# state -> (rank, icon, colour)
+STATES = {
+    "blocked": (0, "BLOCK", "\033[31;1m"),      # needs you
+    "done":    (1, "DONE ", "\033[38;5;154m"),  # matches the activity colour
+    "working": (2, "WORK ", "\033[33m"),
+    "idle":    (3, "IDLE ", "\033[90m"),  # agent present, nothing pending
+}
+PLAIN = (4, "     ", "")                         # not an agent window
+RESET = "\033[0m"
+DIM = "\033[90m"
+GREEN = "\033[32m"
+RED = "\033[31m"
+
+# Branches to measure a worktree against, best first. Falls back to HEAD,
+# which reduces the count to just the uncommitted changes.
+BASES = ("origin/master", "origin/main", "master", "main")
+
+# claude writes one of these per running session, keyed by pid, holding the
+# name from /rename.
+CLAUDE_SESSIONS = pathlib.Path.home() / ".claude/sessions"
+
+# Live view of the highlighted window, so a permission prompt can be read
+# without leaving the picker. {1} is the window id, the hidden first field.
+# The awk trims trailing blank lines: a pane is usually mostly empty below
+# the prompt, and without this the preview shows a screen of nothing.
+#
+# The tail is what puts the bottom of the pane on screen. Scrolling with the
+# preview-window +N offset does not work: it puts line N at the TOP, so the
+# last line ends up alone above a screen of nothing. `follow` is for output
+# still being written and does nothing here either.
+PREVIEW = (
+    "tmux capture-pane -p -e -t {1} | "
+    "awk 'NF{p=NR} {l[NR]=$0} END{for(i=1;i<=p;i++) print l[i]}' | "
+    "tail -n 25"
+)
+
+
+def session_names():
+    """pid -> the name you gave that claude session with /rename."""
+    named = {}
+    if not CLAUDE_SESSIONS.is_dir():
+        return named
+    for path in CLAUDE_SESSIONS.glob("*.json"):
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        # "derived" is claude's own auto-name, e.g. prgit-rbs-91 -- less
+        # informative than anything else we could show.
+        if (record.get("pid") and record.get("name")
+                and record.get("nameSource") != "derived"):
+            named[int(record["pid"])] = record["name"]
+    return named
+
+
+def child_pids():
+    """ppid -> [pid]. Read once; walking /proc per window would be silly."""
+    children = {}
+    for entry in pathlib.Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / "stat").read_text()
+        except OSError:
+            continue
+        # Split on the last ')' -- a process name can contain spaces and
+        # parens, which is exactly what breaks naive field splitting.
+        fields = stat.rsplit(")", 1)[-1].split()
+        if len(fields) >= 2:
+            children.setdefault(int(fields[1]), []).append(int(entry.name))
+    return children
+
+
+def name_under(pane_pid, children, named):
+    """The session name of whichever agent runs inside this pane.
+
+    A window with no state file is spotted by process name alone, so there
+    is no session id to look up -- but the agent is a descendant of the
+    pane, and the sessions index is keyed by pid.
+    """
+    seen, stack = set(), [pane_pid]
+    while stack:
+        pid = stack.pop()
+        if pid in named:
+            return named[pid]
+        for child in children.get(pid, ()):
+            if child not in seen:
+                seen.add(child)
+                stack.append(child)
+    return ""
+
+
+def tmux(*args):
+    return subprocess.run(("tmux",) + args, capture_output=True, text=True,
+                          check=False)
+
+
+def tmux_windows():
+    result = tmux("list-windows", "-a", "-F",
+                  "#{window_id}\t#{session_name}\t#{window_index}\t"
+                  "#{window_name}\t#{window_active}\t#{pane_current_command}\t"
+                  "#{pane_pid}")
+    if result.returncode != 0:
+        sys.exit("agent-pick: no tmux server")
+    found = {}
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) == 7:
+            found[parts[0]] = parts[1:]
+    return found
+
+
+def states():
+    found = {}
+    for path in STATE_DIR.glob("*.json"):
+        try:
+            found[path.stem] = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+    return found
+
+
+def branch(path):
+    """Branch of the worktree the agent is in, if it is in one."""
+    if not path or not os.path.isdir(path):
+        return ""
+    head = subprocess.run(
+        ("git", "-C", path, "rev-parse", "--abbrev-ref", "HEAD"),
+        capture_output=True, text=True, check=False,
+    )
+    return head.stdout.strip() if head.returncode == 0 else ""
+
+
+def diffstat(path):
+    """Lines added/removed in this worktree relative to its base branch.
+
+    Measured against the merge-base, not HEAD, so the count still means
+    something after the agent has committed -- which it usually has.
+    Comparing the worktree to that base covers committed and uncommitted
+    work in one number.
+    """
+    if not path or not os.path.isdir(path):
+        return 0, 0
+    base = "HEAD"
+    for candidate in BASES:
+        found = subprocess.run(
+            ("git", "-C", path, "merge-base", "HEAD", candidate),
+            capture_output=True, text=True, check=False,
+        )
+        if found.returncode == 0 and found.stdout.strip():
+            base = found.stdout.strip()
+            break
+    numstat = subprocess.run(
+        ("git", "-C", path, "diff", "--numstat", base),
+        capture_output=True, text=True, check=False,
+    )
+    if numstat.returncode != 0:
+        return 0, 0
+    added = removed = 0
+    for line in numstat.stdout.splitlines():
+        cols = line.split("\t")
+        if len(cols) >= 2:
+            added += int(cols[0]) if cols[0].isdigit() else 0
+            removed += int(cols[1]) if cols[1].isdigit() else 0
+    return added, removed
+
+
+def collect():
+    slots = states()
+    rows = []
+    children, named = child_pids(), session_names()
+    for slot, (session, index, name, active, command,
+               pane_pid) in tmux_windows().items():
+        record = slots.get(slot)
+        # Same rule the status bar uses: a window running an agent counts as
+        # one even before any hook has fired, otherwise the two disagree.
+        if record is None and command in ("claude", "codex"):
+            record = {"state": "idle"}
+        if record is None:
+            rank, icon, colour = PLAIN
+            label, head = name, ""
+            added = removed = 0
+        else:
+            rank, icon, colour = STATES.get(record.get("state", ""), STATES["idle"])
+            # Live name first: a stored title is a snapshot and goes stale
+            # the moment you /rename.
+            label = (name_under(int(pane_pid), children, named)
+                     or record.get("title") or name)
+            head = branch(record.get("cwd", ""))
+            added, removed = diffstat(record.get("cwd", ""))
+        rows.append({
+            "slot": slot, "index": index, "label": label,
+            "branch": head, "added": added, "removed": removed,
+            "active": active == "1", "rank": rank,
+            "icon": icon, "colour": colour,
+            "since": (record or {}).get("since", 0),
+        })
+
+    # agents first -- blocked, most-recently-finished, working, quiet --
+    # then every other window in index order.
+    rows.sort(key=lambda r: (r["rank"], -r["since"], int(r["index"])))
+    return rows
+
+
+def render(rows):
+    width = min(max((len(r["label"]) for r in rows), default=20), 44)
+    lines = []
+    for row in rows:
+        label = row["label"][:width].ljust(width)
+        here = "‹" if row["active"] else " "
+        lines.append(
+            f"{row['slot']}\t{row['colour']}{row['icon']}{RESET}"
+            f"{here} {row['colour']}{label}{RESET}  "
+            f"{DIM}{row['index']}  {row['branch']}{RESET}"
+            + (f"  {GREEN}+{row['added']}{RESET} {RED}-{row['removed']}{RESET}"
+               if row["added"] or row["removed"] else "")
+        )
+    return lines
+
+
+def main():
+    rows = collect()
+    if not rows:
+        return
+
+    # stdout only, never capture_output: fzf draws its interface on stderr,
+    # so capturing that sends the whole UI into a pipe and the popup shows
+    # nothing at all.
+    fzf = subprocess.run(
+        ("fzf", "--ansi", "--reverse", "--delimiter=\t", "--with-nth=2..",
+         "--no-sort", "--info=inline", "--prompt=window › ",
+         "--header=BLOCK needs you   DONE unseen   WORK running   (ctrl-/ hides preview)",
+         "--preview", PREVIEW, "--preview-window", "right:55%:wrap",
+         "--bind", "ctrl-/:toggle-preview"),
+        input="\n".join(render(rows)), stdout=subprocess.PIPE, text=True,
+        check=False,
+    )
+    if fzf.returncode != 0 or not fzf.stdout.strip():
+        return
+
+    slot = fzf.stdout.split("\t", 1)[0].strip()
+    session = tmux("display-message", "-p", "-t", slot, "#{session_name}")
+    if session.stdout.strip():
+        tmux("switch-client", "-t", session.stdout.strip())
+    tmux("select-window", "-t", slot)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,245 @@
+#!/usr/bin/env python3
+"""Record what a coding agent is doing, for the tmux status bar.
+
+Runs wherever the agent runs -- on the LSF exec host, not on tlv. The agent
+cannot reach tlv's tmux server, so it drops a small JSON file on shared
+storage and agent-sync (on tlv) picks it up.
+
+A "slot" is one tmux window, identified by its tmux window id (@7). The
+launcher puts that id in $AGENT_SLOT. With no $AGENT_SLOT this is an
+unmanaged window and every command silently does nothing -- a hook must
+never break the agent it is attached to.
+
+Called from claude/codex hooks, and by the agent itself for `title`.
+"""
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import time
+
+# XDG state directory: machine-local data that should survive a reboot but
+# means nothing on another host.
+STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
+
+# claude keeps one small file per running session here, keyed by pid, with
+# the name you gave it via /rename. That name beats anything we could infer.
+CLAUDE_SESSIONS = pathlib.Path.home() / ".claude/sessions"
+
+# hook event -> flag shown in the status bar. claude and codex use the same
+# event names, so one table serves both.
+EVENTS = {
+    "SessionStart": "idle",     # occupied, nothing pending
+    "UserPromptSubmit": "working",
+    "PermissionRequest": "blocked",
+    "PostToolUse": "working",   # you answered the prompt; stop showing blocked
+    "Stop": "done",
+}
+
+
+def slot_from_tmux():
+    """Derive the window when the agent runs on the same machine as tmux.
+
+    Only the LSF case genuinely needs $AGENT_SLOT passed in; running an agent
+    in a local tmux window should not need any setup. On an exec host
+    $TMUX_PANE is absent, so this costs nothing there.
+    """
+    pane = os.environ.get("TMUX_PANE")
+    if not pane:
+        return ""
+    found = subprocess.run(
+        ("tmux", "display-message", "-p", "-t", pane, "#{window_id}"),
+        capture_output=True, text=True, check=False,
+    )
+    return found.stdout.strip() if found.returncode == 0 else ""
+
+
+def slot():
+    value = os.environ.get("AGENT_SLOT") or slot_from_tmux()
+    if not value:
+        sys.exit(0)
+    return value.replace("/", "_")
+
+
+def path():
+    return STATE_DIR / f"{slot()}.json"
+
+
+def load():
+    try:
+        return json.loads(path().read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def save(record):
+    record["slot"] = slot()
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = path().with_suffix(".tmp")
+    tmp.write_text(json.dumps(record))
+    tmp.replace(path())  # atomic: agent-sync never reads a half-written file
+
+
+def set_state(state, **fields):
+    record = load()
+    if record.get("state") != state:
+        record["since"] = int(time.time())
+    record["state"] = state
+    record.update({k: v for k, v in fields.items() if v})
+    save(record)
+
+
+def payload(args):
+    """claude passes hook JSON on stdin; codex has passed it as an argument.
+    Accept either rather than depending on which one this version does."""
+    for arg in args:
+        if arg.startswith("{"):
+            try:
+                return json.loads(arg)
+            except ValueError:
+                pass
+    try:
+        if not sys.stdin.isatty():
+            return json.load(sys.stdin)
+    except (ValueError, OSError):
+        pass
+    return {}
+
+
+def cmd_hook(args):
+    # Which agent this is has to be told to us: no hook payload identifies
+    # it, so each tool's config hardcodes it -- `agent-state hook claude`.
+    kind = next((a for a in args if a in ("claude", "codex")), "")
+    data = payload(args)
+    event = data.get("hook_event_name") or data.get("type", "")
+
+    if event in ("SessionEnd", "agent-turn-end"):
+        path().unlink(missing_ok=True)
+        return
+
+    # codex's older notify path only ever reports turn completion
+    if event == "agent-turn-complete":
+        event = "Stop"
+
+    if event not in EVENTS:
+        return
+
+    state = EVENTS[event]
+
+    if event == "SessionStart":
+        # Fresh agent in this slot. Drop whatever the last occupant left --
+        # this is what makes ctrl-C and relaunch reset the window cleanly.
+        save({"state": "idle", "since": int(time.time()),
+              "agent": kind, "cwd": data.get("cwd", "")})
+        return
+
+    # PostToolUse fires on every tool call, so keep it cheap: it exists only
+    # to clear `blocked` once you have answered, and is a no-op otherwise.
+    if event == "PostToolUse" and load().get("state") != "blocked":
+        return
+
+    # Title precedence: what you named the session, then what the agent
+    # called it, then the first line of your prompt as a last resort.
+    extra = {}
+    if event in ("UserPromptSubmit", "Stop"):
+        named = session_name(data.get("session_id", ""))
+        if named:
+            extra = {"title": named, "title_by": "session"}
+        elif event == "UserPromptSubmit" and load().get("title_by") != "agent":
+            guess = title_from_prompt(data)
+            if guess:
+                extra = {"title": guess, "title_by": "prompt"}
+    set_state(state, agent=kind, cwd=data.get("cwd", ""), **extra)
+
+
+def session_name(session_id):
+    """The name you set with /rename, if you set one.
+
+    Auto-generated names carry nameSource "derived" and are ignored:
+    "prgit-rbs-91" says less than the first line of your prompt.
+    """
+    if not session_id or not CLAUDE_SESSIONS.is_dir():
+        return ""
+    for path in CLAUDE_SESSIONS.glob("*.json"):
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if record.get("sessionId") != session_id:
+            continue
+        if record.get("nameSource") == "derived":
+            return ""
+        return (record.get("name") or "")[:44]
+    return ""
+
+
+def prompt_text(data):
+    """What the user just asked for, whichever way the agent phrases it.
+
+    claude sends `prompt` as a string; codex has sent `input-messages` as a
+    list. Try the plausible spellings rather than pinning to one agent.
+    """
+    for key in ("prompt", "input-messages", "user_prompt", "message"):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+        if isinstance(value, list) and value:
+            first = value[0]
+            if isinstance(first, str) and first.strip():
+                return first
+            if isinstance(first, dict):
+                for inner in ("content", "text", "message"):
+                    if isinstance(first.get(inner), str):
+                        return first[inner]
+    return ""
+
+
+def title_from_prompt(data):
+    """First line of what you asked for, as a stand-in title.
+
+    Better than showing 'claude' for every window, and it costs nothing.
+    An explicit `agent-state title` outranks it and is never overwritten.
+    """
+    line = next((l.strip() for l in prompt_text(data).splitlines()
+                 if l.strip()), "")
+    return line[:44]
+
+
+def cmd_title(args):
+    if not args:
+        sys.exit("usage: agent-state title <text>")
+    record = load()
+    record["title"] = " ".join(args).strip()
+    record["title_by"] = "agent"
+    record.setdefault("state", "idle")
+    record.setdefault("since", int(time.time()))
+    save(record)
+
+
+def cmd_agent(args):
+    if not args:
+        sys.exit("usage: agent-state agent <claude|codex>")
+    record = load()
+    record["agent"] = args[0]
+    record.setdefault("state", "idle")
+    record.setdefault("since", int(time.time()))
+    save(record)
+
+
+def cmd_clear(_args):
+    path().unlink(missing_ok=True)
+
+
+COMMANDS = {"hook": cmd_hook, "title": cmd_title,
+            "agent": cmd_agent, "clear": cmd_clear}
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] not in COMMANDS:
+        sys.exit(f"usage: agent-state <{'|'.join(COMMANDS)}> [args]")
+    COMMANDS[sys.argv[1]](sys.argv[2:])
+
+
+if __name__ == "__main__":
+    main()

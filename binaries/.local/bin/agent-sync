@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Mirror agent state files into tmux window options. Runs on tlv.
+
+The agents run on an LSF exec host and cannot talk to this tmux server, so
+they write JSON to shared storage and this is the only thing that touches
+tmux. Sets four window options, which .tmux.agents.conf renders:
+
+    @agent_state   working | blocked | done | idle
+    @agent_title   agent-chosen title, shown in the picker
+    @agent_kind    claude | codex
+    @agent_cwd     the agent's real cwd
+    @agent_branch  branch of that cwd, for status-left
+
+and two globals for the fleet summary in status-right:
+
+    @agent_blocked  how many windows need you
+    @agent_done     how many have finished and not been looked at
+
+The counts are computed here rather than by a #() in the status format:
+the daemon already has the data, and a #() would shell out on every redraw.
+
+@agent_cwd matters more than it looks: the tmux pane on tlv is running
+blaunch, so #{pane_current_path} is wherever *you* launched from, not the
+worktree the agent is sitting in.
+
+`done` is an unread marker, not a state: it clears when you select the
+window, the same way tmux's own activity flag behaves. `blocked` is not --
+it clears only when the agent reports progress, i.e. when you have actually
+answered it.
+"""
+import fcntl
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import time
+
+# XDG state directory: machine-local data that should survive a reboot but
+# means nothing on another host.
+STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
+INTERVAL = float(os.environ.get("AGENT_SYNC_INTERVAL", "2"))
+BRANCH_TTL = 30  # a worktree's branch rarely changes; don't run git every cycle
+OPTIONS = ("@agent_state", "@agent_title", "@agent_kind", "@agent_cwd",
+           "@agent_branch")
+
+_branches = {}  # cwd -> (branch, when)
+
+
+def tmux(*args):
+    return subprocess.run(("tmux",) + args, capture_output=True, text=True,
+                          check=False)
+
+
+def windows():
+    """window_id -> is it the active window of its session"""
+    result = tmux("list-windows", "-a", "-F", "#{window_id}\t#{window_active}")
+    if result.returncode != 0:
+        return None
+    found = {}
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) == 2:
+            found[parts[0]] = parts[1] == "1"
+    return found
+
+
+def branch(path):
+    if not path or not os.path.isdir(path):
+        return ""
+    cached, when = _branches.get(path, ("", 0))
+    if time.time() - when < BRANCH_TTL:
+        return cached
+    head = subprocess.run(
+        ("git", "-C", path, "rev-parse", "--abbrev-ref", "HEAD"),
+        capture_output=True, text=True, check=False,
+    )
+    name = head.stdout.strip() if head.returncode == 0 else ""
+    _branches[path] = (name, time.time())
+    return name
+
+
+def apply(window, record):
+    for option, value in (
+        # Normalise: a state file written before "idle" existed, or one
+        # truncated mid-write, must not read as "not an agent window".
+        ("@agent_state", record.get("state") or "idle"),
+        ("@agent_title", record.get("title", "")),
+        ("@agent_kind", record.get("agent", "")),
+        ("@agent_cwd", record.get("cwd", "")),
+        ("@agent_branch", branch(record.get("cwd", ""))),
+    ):
+        tmux("set-option", "-w", "-t", window, option, value)
+    # An agent prints continuously, so the activity flag is on permanently
+    # and tells you nothing. The state word is the signal here.
+    tmux("set-option", "-w", "-t", window, "monitor-activity", "off")
+
+
+def mark_seen(path, record):
+    record["state"] = "idle"
+    record["since"] = int(time.time())
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(record))
+    tmp.replace(path)
+
+
+def sync_once(decorated):
+    live = windows()
+    if live is None:
+        return decorated
+
+    current = set()
+    counts = {"blocked": 0, "done": 0}
+    for path in STATE_DIR.glob("*.json"):
+        slot = path.stem
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+
+        if slot not in live:
+            path.unlink(missing_ok=True)  # window is gone for good
+            continue
+
+        # Visiting the window is what clears a `done` marker. Deliberately
+        # not applied to `blocked` -- looking at it is not answering it.
+        if record.get("state") == "done" and live[slot]:
+            mark_seen(path, record)
+            record["state"] = "idle"
+
+        apply(slot, record)
+        current.add(slot)
+        if record.get("state") in counts:
+            counts[record["state"]] += 1
+
+    for slot in decorated - current:
+        if slot in live:
+            for option in OPTIONS:
+                tmux("set-option", "-w", "-t", slot, "-u", option)
+            tmux("set-option", "-w", "-t", slot, "-u", "monitor-activity")
+
+    tmux("set-option", "-g", "@agent_blocked", str(counts["blocked"]))
+    tmux("set-option", "-g", "@agent_done", str(counts["done"]))
+
+    return current
+
+
+def single_instance():
+    """Hold an exclusive lock for as long as we run, so sourcing .tmux.conf
+    repeatedly cannot stack up daemons.
+
+    The guard lives here rather than in a pgrep in the tmux config: any such
+    pattern also matches the shell running it, because the command that
+    launches this script sits on the same command line as the pattern.
+
+    The handle is deliberately kept alive for the process lifetime -- if it
+    were garbage collected the lock would be released.
+    """
+    lock = open(STATE_DIR / "sync.lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        sys.exit(0)  # another agent-sync already has it
+    return lock
+
+
+def main():
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    _lock = single_instance()  # noqa: F841 -- must outlive main()
+    if windows() is None:
+        sys.exit("agent-sync: no tmux server")
+    decorated = set()
+    while True:
+        try:
+            decorated = sync_once(decorated)
+        except Exception as exc:  # one bad cycle must not kill the daemon
+            print(f"agent-sync: {exc}", file=sys.stderr)
+        time.sleep(INTERVAL)
+
+
+if __name__ == "__main__":
+    main()

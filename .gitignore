@@ -1,0 +1,3 @@
+# Claude Code scratch in this repo (settings.local.json, worktrees).
+# Anchored so it does not match the stow package at agents/.claude/.
+/.claude/
