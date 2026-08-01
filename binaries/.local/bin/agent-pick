@@ -86,8 +86,17 @@ def session_names():
     return named
 
 
-def codex_title(thread):
-    """Live title of a codex thread, from the newest state database."""
+def codex_title(record):
+    """Live title of a codex thread, when it is worth more than what we have.
+
+    codex derives a thread title from the first message, so most of the time
+    it is the opening prompt again. Only use it when it differs from the
+    prompt we already derived -- that difference is the signal that someone
+    renamed the thread deliberately.
+
+    `owner` is the same id under the name the remote-agent code stores it.
+    """
+    thread = record.get("thread") or record.get("owner")
     if not thread:
         return ""
     databases = sorted(glob.glob(CODEX_STATE))
@@ -101,7 +110,8 @@ def codex_title(thread):
         con.close()
     except sqlite3.Error:
         return ""
-    return (row[0] or "")[:44] if row else ""
+    title = (row[0] or "")[:44] if row else ""
+    return "" if title == record.get("prompt_title") else title
 
 
 def child_pids():
@@ -242,8 +252,10 @@ def collect():
             # the moment you /rename.
             # Live name first, per agent: a stored title is a snapshot and
             # goes stale the moment the session is renamed.
+            # Live names first, then a name an agent chose for itself, then
+            # whatever the opening prompt gave us.
             label = (name_under(int(pane_pid), children, named)
-                     or codex_title(record.get("thread", ""))
+                     or codex_title(record)
                      or record.get("title") or name)
             head = branch(record.get("cwd", ""))
             added, removed = diffstat(record.get("cwd", ""))
