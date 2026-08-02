@@ -39,38 +39,69 @@ rank() {
 
 level() { cat "$LEVEL_FILE" 2>/dev/null || echo updates; }
 
+# Do not talk over you. A recording stream on the mic means handy is
+# listening, or you are on a call; either way, wait for it to go away.
+wait_for_mic() {
+  for _ in $(seq 90); do
+    mic_busy || return 0
+    sleep 1
+  done
+  return 1  # you have been talking for a minute and a half; it can wait
+}
+
+synth() {  # $1 text -> raw audio in file $2
+  curl -sS -m 120 "$URL" -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg i "$1" --arg v "$VOICE" \
+          '{model:"kokoro", input:$i, voice:$v, response_format:"pcm"}')" > "$2"
+}
+
+# Play one sentence. Fails if you started talking part way through it.
+play() {
+  paplay --raw --format=s16le --rate=24000 --channels=1 "$1" &
+  local job=$! cut=0
+  while kill -0 "$job" 2>/dev/null; do
+    mic_busy && kill "$job" 2>/dev/null && cut=1 && break
+    sleep 0.2
+  done
+  wait "$job" 2>/dev/null
+  return $cut
+}
+
 # $1 minimum level this is worth hearing at, $2 what to say.
 speak() {
   [ -n "${2// /}" ] || return 0
   [ "$(rank "$1")" -le "$(rank "$(level)")" ] || return 0
 
-  # Hold the lock across the playback, not just the fetch -- releasing it when
-  # curl exits let the next agent start talking over the tail of this one.
+  # Hold the lock across the whole utterance, not just the fetch -- releasing
+  # it when curl exits let the next agent talk over the tail of this one.
   exec 9>"$LOCK"
   flock -w 60 9 || return 0
 
-  # Do not talk over you. A recording stream on the mic means handy is
-  # listening, or you are on a call; either way, wait for it to go away.
-  for _ in $(seq 90); do
-    mic_busy || break
-    sleep 1
-  done
+  # A sentence at a time, so that being interrupted has a place to resume
+  # from: whichever sentence you cut off, said again from its start. It costs
+  # a pause per full stop, which sounds like a pause per full stop.
+  local -a parts
+  mapfile -t parts < <(sed 's/\([.!?]\)  */\1\n/g' <<<"$2")
+  local cut_at i=0
+  wav=$(mktemp)  # not local: the EXIT trap runs after this function returns
+  trap 'rm -f "$wav"' EXIT
 
-  { curl -sS -m 120 "$URL" -H 'Content-Type: application/json' \
-      -d "$(jq -nc --arg i "$2" --arg v "$VOICE" \
-            '{model:"kokoro", input:$i, voice:$v, response_format:"pcm"}')" |
-      paplay --raw --format=s16le --rate=24000 --channels=1; } &
-  local job=$!
-  # ...and if you start talking part way through, stop, the way a person
-  # would. The rest of the sentence is dropped: you interrupted for a reason.
-  # Matching on the command line is precise enough because the lock above
-  # means this is the only playback running. Killing it also ends the curl
-  # feeding it, via SIGPIPE.
-  while kill -0 "$job" 2>/dev/null; do
-    mic_busy && pkill -f 'paplay --raw --format=s16le --rate=24000' && break
-    sleep 0.2
+  while [ "$i" -lt "${#parts[@]}" ]; do
+    wait_for_mic || return 0
+    synth "${parts[i]}" "$wav"
+    if play "$wav"; then
+      i=$((i + 1))
+      continue
+    fi
+    # Resume only if you cut in briefly. Say something substantial and the
+    # rest of this is stale news -- picking it up again would be odd.
+    cut_at=$SECONDS
+    wait_for_mic || return 0
+    [ $((SECONDS - cut_at)) -lt 20 ] || return 0
+    synth "As I was saying." "$wav"
+    play "$wav"
   done
-  wait "$job" 2>/dev/null
+  return 0
 }
 
 # What this session is called, so you can tell agents apart by ear. agent-state
