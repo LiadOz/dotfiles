@@ -206,11 +206,61 @@ def write_state(path, record, state):
     tmp.replace(path)
 
 
+def migrate_legacy(server, panes):
+    """Turn the last window records into stable session records once."""
+    by_window = {}
+    for pane, window in panes.items():
+        by_window.setdefault(window, []).append(pane)
+    SESSION_DIR.mkdir(parents=True, exist_ok=True)
+
+    for legacy_path in STATE_DIR.glob("@*.json"):
+        try:
+            legacy = json.loads(legacy_path.read_text())
+        except (OSError, ValueError):
+            continue
+        owner = legacy.get("owner", "")
+        candidates = by_window.get(legacy_path.stem, [])
+        if legacy.get("state") == "free":
+            remove(legacy_path)
+            continue
+        if not owner or not candidates:
+            continue
+
+        target = SESSION_DIR / f"{owner.replace('/', '_')}.json"
+        try:
+            current = json.loads(target.read_text())
+        except (OSError, ValueError):
+            current = {}
+        record = dict(legacy)
+        record.update(current)
+        if (legacy.get("title_by") == "agent"
+                and current.get("title_by") != "agent"):
+            record.update({"title": legacy.get("title", ""),
+                           "title_by": "agent"})
+        if (legacy.get("cwd_by") == "agent"
+                and current.get("cwd_by") != "agent"):
+            record.update({"cwd": legacy.get("cwd", ""),
+                           "cwd_by": "agent"})
+        pane = (record.get("pane") if record.get("pane") in candidates
+                else candidates[0])
+        modified = int(legacy_path.stat().st_mtime * 1000)
+        record.update({"owner": owner, "server": server, "pane": pane})
+        record.setdefault("started", modified)
+        record.setdefault("updated", modified)
+        record.pop("slot", None)
+        record.pop("bound_by", None)
+        tmp = target.with_suffix(".tmp")
+        tmp.write_text(json.dumps(record))
+        tmp.replace(target)
+        remove(legacy_path)
+
+
 def sync_once():
     snapshot = windows()
     if snapshot is None:
         return False
     live, decorated, server, panes = snapshot
+    migrate_legacy(server, panes)
 
     current = set()
     counts = {"blocked": 0, "done": 0}
@@ -281,6 +331,17 @@ def single_instance(server):
 
 
 def main():
+    # Old tmux servers may retain this removed hook until the config is
+    # reloaded. Keep it silent during that migration.
+    if len(sys.argv) == 3 and sys.argv[1] == "focus":
+        return
+    if len(sys.argv) == 3 and sys.argv[1] == "migrate":
+        try:
+            links = json.loads(WINDOW_PATH.read_text())
+        except (OSError, ValueError):
+            sys.exit("agent-sync: no tmux window snapshot")
+        migrate_legacy(sys.argv[2], {row["pane"]: row["id"] for row in links})
+        return
     if len(sys.argv) == 4 and sys.argv[1] == "clear":
         server, pane = sys.argv[2:]
         for path in SESSION_DIR.glob("*.json"):
@@ -292,7 +353,8 @@ def main():
                 remove(path)
         return
     if len(sys.argv) != 3 or sys.argv[1] != "daemon":
-        sys.exit("usage: agent-sync daemon <server> | clear <server> <pane>")
+        sys.exit("usage: agent-sync daemon|migrate <server> | "
+                 "clear <server> <pane>")
     server = sys.argv[2]
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     _lock = single_instance(server)  # noqa: F841 -- must outlive main()

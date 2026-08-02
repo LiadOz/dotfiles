@@ -62,7 +62,8 @@ def save(value, record):
     tmux = os.environ.get("TMUX", "").rsplit(",", 2)
     pane = os.environ.get("TMUX_PANE", "")
     if len(tmux) == 3 and pane:
-        record.update({"server": tmux[1], "pane": pane})
+        record.setdefault("server", tmux[1])
+        record.setdefault("pane", pane)
     record["updated"] = int(time.time() * 1000)
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
     target = session_path(value)
