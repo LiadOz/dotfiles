@@ -14,10 +14,6 @@ import pathlib
 import subprocess
 import sys
 
-# XDG state directory: machine-local data that should survive a reboot but
-# means nothing on another host.
-STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
-
 # Field separator for tmux -F output. Not a tab: the tmux build on tlv
 # replaces tabs in -F output with underscores, so every line parsed as a
 # single field, both scripts saw zero windows, and the whole thing was
@@ -120,38 +116,29 @@ def tmux_windows():
                             "#{window_index}", "#{window_name}",
                             "#{window_active}", "#{pane_current_command}",
                             "#{@agent_branch}", "#{@agent_added}",
-                            "#{@agent_removed}", "#{pid}")))
+                            "#{@agent_removed}", "#{@agent_state}",
+                            "#{@agent_title}", "#{@agent_title_by}",
+                            "#{@agent_kind}", "#{@agent_owner}",
+                            "#{@agent_thread}", "#{@agent_since}")))
     if result.returncode != 0:
         sys.exit("agent-pick: no tmux server")
     found = {}
     for line in result.stdout.splitlines():
         parts = line.split(SEP)
-        if len(parts) == 10:
+        if len(parts) == 16:
             found[parts[0]] = parts[1:]
     return found
 
 
-def states():
-    found = {}
-    for path in STATE_DIR.glob("*.json"):
-        try:
-            found[path.stem] = json.loads(path.read_text())
-        except (OSError, ValueError):
-            continue
-    return found
-
-
 def collect():
-    slots = states()
     rows = []
     named = session_names()
     for slot, (_session, index, name, active, command, head,
-               added, removed, server) in tmux_windows().items():
-        record = slots.get(slot)
-        if (record is not None
-                and (record.get("bound_by") != "pane"
-                     or record.get("server") != server)):
-            record = None
+               added, removed, state, title, title_by, kind, owner,
+               thread, since) in tmux_windows().items():
+        record = ({"state": state, "title": title, "title_by": title_by,
+                   "agent": kind, "owner": owner, "thread": thread,
+                   "since": int(since or 0)} if state else None)
         # Same rule the status bar uses: a window running an agent counts as
         # one even before any hook has fired, otherwise the two disagree.
         if record is None and command in ("claude", "codex"):

@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """Mirror agent state files into tmux window options. Runs on tlv.
 
-The agents run on an LSF exec host and cannot talk to this tmux server, so
-they write JSON to shared storage and this is the only thing that touches
-tmux. Sets seven window options, which .tmux.agents.conf renders:
+The agents run on an LSF exec host and cannot talk to this tmux server. Each
+writes a session record containing the tmux server and pane ids inherited at
+launch. This daemon maps those identities to current windows and is the only
+thing that sets their tmux options.
 
     @agent_state   working | blocked | done | idle
     @agent_title   agent-chosen title, shown in the picker
+    @agent_title_by agent | session | prompt
     @agent_kind    claude | codex
     @agent_cwd     the agent's real cwd
+    @agent_owner   stable Claude/Codex session id
+    @agent_thread  Codex thread id, for live renamed titles
+    @agent_since   timestamp of the last state change
     @agent_branch  branch of that cwd, for status-left
     @agent_added   lines added in the worktree
     @agent_removed lines removed in the worktree
@@ -38,11 +43,9 @@ import subprocess
 import sys
 import time
 
-# Shared by the tmux host and the LSF exec host.
 STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
-FOCUS_PATH = STATE_DIR / "focus"
+SESSION_DIR = STATE_DIR / "sessions"
 WINDOW_PATH = STATE_DIR / "windows"
-PANE_PATH = STATE_DIR / "panes"
 INTERVAL = float(os.environ.get("AGENT_SYNC_INTERVAL", "2"))
 GIT_TTL = 30  # keep Git work out of the two-second state sync path
 BASES = ("origin/master", "origin/main", "master", "main")
@@ -53,7 +56,8 @@ BASES = ("origin/master", "origin/main", "master", "main")
 # will not occur in a window name, a title taken from a prompt, or a branch.
 SEP = ":::"
 
-OPTIONS = ("@agent_state", "@agent_title", "@agent_kind", "@agent_cwd",
+OPTIONS = ("@agent_state", "@agent_title", "@agent_title_by", "@agent_kind",
+           "@agent_cwd", "@agent_owner", "@agent_thread", "@agent_since",
            "@agent_branch", "@agent_added", "@agent_removed")
 SHELLS = ("bash", "fish", "ksh", "sh", "tcsh", "zsh")
 
@@ -68,13 +72,6 @@ def remove(path):
     except FileNotFoundError:
         pass
 
-
-def write_focus(window):
-    """Publish the focused tmux window for agents on remote hosts."""
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = FOCUS_PATH.with_suffix(".tmp")
-    tmp.write_text(window)
-    tmp.replace(FOCUS_PATH)
 
 def tmux(*args):
     return subprocess.run(("tmux",) + args, stdout=subprocess.PIPE,
@@ -124,9 +121,7 @@ def windows():
             panes[parts[9]] = parts[0]
 
     write_changed(WINDOW_PATH, json.dumps(links, sort_keys=True))
-    write_changed(PANE_PATH, json.dumps({"server": server, "panes": panes},
-                                       sort_keys=True))
-    return live, decorated, server
+    return live, decorated, server, panes
 
 
 def branch(path):
@@ -187,8 +182,12 @@ def apply(window, record):
         # truncated mid-write, must not read as "not an agent window".
         ("@agent_state", record.get("state") or "idle"),
         ("@agent_title", record.get("title", "")),
+        ("@agent_title_by", record.get("title_by", "")),
         ("@agent_kind", record.get("agent", "")),
         ("@agent_cwd", cwd),
+        ("@agent_owner", record.get("owner", "")),
+        ("@agent_thread", record.get("thread", "")),
+        ("@agent_since", str(record.get("since", 0))),
         ("@agent_branch", branch(cwd)),
         ("@agent_added", str(added)),
         ("@agent_removed", str(removed)),
@@ -211,23 +210,25 @@ def sync_once():
     snapshot = windows()
     if snapshot is None:
         return False
-    live, decorated, server = snapshot
+    live, decorated, server, panes = snapshot
 
     current = set()
     counts = {"blocked": 0, "done": 0}
-    for path in STATE_DIR.glob("*.json"):
-        slot = path.stem
+    selected = {}
+    for path in SESSION_DIR.glob("*.json"):
         try:
             record = json.loads(path.read_text())
         except (OSError, ValueError):
             continue
-
-        if slot not in live:
-            remove(path)  # window is gone for good
+        if record.get("server") != server or record.get("pane") not in panes:
             continue
-        if record.get("bound_by") != "pane" or record.get("server") != server:
-            continue
+        slot = panes[record["pane"]]
+        score = (record.get("started", record.get("updated", 0)),
+                 record.get("state") != "free", record.get("updated", 0))
+        if slot not in selected or score > selected[slot][0]:
+            selected[slot] = score, path, record
 
+    for slot, (_score, path, record) in selected.items():
         # Visiting the window is what clears a `done` marker. Deliberately
         # not applied to `blocked` -- looking at it is not answering it.
         active, commands = live[slot]
@@ -260,7 +261,7 @@ def sync_once():
     return True
 
 
-def single_instance():
+def single_instance(server):
     """Hold an exclusive lock for as long as we run, so sourcing .tmux.conf
     repeatedly cannot stack up daemons.
 
@@ -271,7 +272,7 @@ def single_instance():
     The handle is deliberately kept alive for the process lifetime -- if it
     were garbage collected the lock would be released.
     """
-    lock = open(STATE_DIR / "sync.lock", "w")
+    lock = open(STATE_DIR / f"sync-{server}.lock", "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
@@ -280,11 +281,21 @@ def single_instance():
 
 
 def main():
-    if len(sys.argv) == 3 and sys.argv[1] == "focus":
-        write_focus(sys.argv[2])
+    if len(sys.argv) == 4 and sys.argv[1] == "clear":
+        server, pane = sys.argv[2:]
+        for path in SESSION_DIR.glob("*.json"):
+            try:
+                record = json.loads(path.read_text())
+            except (OSError, ValueError):
+                continue
+            if record.get("server") == server and record.get("pane") == pane:
+                remove(path)
         return
+    if len(sys.argv) != 3 or sys.argv[1] != "daemon":
+        sys.exit("usage: agent-sync daemon <server> | clear <server> <pane>")
+    server = sys.argv[2]
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    _lock = single_instance()  # noqa: F841 -- must outlive main()
+    _lock = single_instance(server)  # noqa: F841 -- must outlive main()
     while True:
         try:
             if not sync_once():
