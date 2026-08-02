@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Say something out loud, so an agent can talk back to you.
+# Ask for something to be said out loud, so an agent can talk back to you.
 #
 #   agent-say "the build is done"      # free-form; only heard at `narrate`
 #   agent-say -l alerts "I am stuck"   # speak unless you have gone silent
@@ -7,105 +7,42 @@
 #   agent-say level updates            # how much you want to hear, right now
 #   agent-say level                    # what it is set to
 #
+# This only writes a note to a spool directory and returns; agent-say-daemon
+# is the one thing that ever plays audio. So an agent never waits on a
+# sentence, agents cannot talk over each other because only one process
+# speaks, and an agent on a remote machine works exactly the same way -- its
+# notes are copied into this spool and read out here.
+#
 # The level describes you, not the agent: whether you are looking at the
 # screen. So it is one global setting, and turning it down quietens every
-# agent on the machine at once, including ones already running.
+# agent you are running, wherever it is running.
 #
 #   silent   nothing at all -- reading along, on a call, not alone
 #   alerts   only when an agent is blocked on you
 #   updates  ...and when one finishes, by name, so you know who wants you
 #   narrate  ...and agents talking freely, and reading you their answer
-#
-# Speech comes from Kokoro-FastAPI on localhost -- an OpenAI-compatible TTS
-# server keeping the model warm on the GPU (systemctl --user status kokoro-tts).
-# Synthesis is a third of a second; loading the model is six, which is why the
-# server stays up rather than starting per notification.
 set -u
 
-URL=${AGENT_SAY_URL:-http://127.0.0.1:8880/v1/audio/speech}
-VOICE=${AGENT_SAY_VOICE:-bf_emma}
-LOCK=${XDG_RUNTIME_DIR:-/tmp}/agent-say.lock
+STATE=${XDG_STATE_HOME:-$HOME/.local/state}/agent-say
 LEVEL_FILE=${XDG_CONFIG_HOME:-$HOME/.config}/agent-say/level
-NARRATED=${XDG_RUNTIME_DIR:-/tmp}/agent-say.narrated
-
-mic_busy() { [ -n "$(pactl list short source-outputs 2>/dev/null)" ]; }
-
-rank() {
-  case $1 in
-    silent) echo 0 ;; alerts) echo 1 ;; narrate) echo 3 ;;
-    *)      echo 2 ;;  # updates, and anything unrecognised
-  esac
-}
+SESSION=${CLAUDE_CODE_SESSION_ID:-$$}
 
 level() { cat "$LEVEL_FILE" 2>/dev/null || echo updates; }
 
-# Do not talk over you. A recording stream on the mic means handy is
-# listening, or you are on a call; either way, wait for it to go away.
-wait_for_mic() {
-  for _ in $(seq 90); do
-    mic_busy || return 0
-    sleep 1
-  done
-  return 1  # you have been talking for a minute and a half; it can wait
-}
-
-synth() {  # $1 text -> raw audio in file $2
-  curl -sS -m 120 "$URL" -H 'Content-Type: application/json' \
-    -d "$(jq -nc --arg i "$1" --arg v "$VOICE" \
-          '{model:"kokoro", input:$i, voice:$v, response_format:"pcm"}')" > "$2"
-}
-
-# Play one sentence. Fails if you started talking part way through it.
-play() {
-  paplay --raw --format=s16le --rate=24000 --channels=1 "$1" &
-  local job=$! cut=0
-  while kill -0 "$job" 2>/dev/null; do
-    mic_busy && kill "$job" 2>/dev/null && cut=1 && break
-    sleep 0.2
-  done
-  wait "$job" 2>/dev/null
-  return $cut
-}
-
-# $1 minimum level this is worth hearing at, $2 what to say.
-speak() {
+# $1 minimum level this is worth hearing at, $2 what to say. Named after the
+# host so you can tell where an agent is speaking from once this is running
+# on the farm as well.
+spool() {
   [ -n "${2// /}" ] || return 0
-  [ "$(rank "$1")" -le "$(rank "$(level)")" ] || return 0
-
-  # Hold the lock across the whole utterance, not just the fetch -- releasing
-  # it when curl exits let the next agent talk over the tail of this one.
-  exec 9>"$LOCK"
-  flock -w 60 9 || return 0
-
-  # A sentence at a time, so that being interrupted has a place to resume
-  # from: whichever sentence you cut off, said again from its start. It costs
-  # a pause per full stop, which sounds like a pause per full stop.
-  local -a parts
-  mapfile -t parts < <(sed 's/\([.!?]\)  */\1\n/g' <<<"$2")
-  local cut_at i=0
-  wav=$(mktemp)  # not local: the EXIT trap runs after this function returns
-  trap 'rm -f "$wav"' EXIT
-
-  while [ "$i" -lt "${#parts[@]}" ]; do
-    wait_for_mic || return 0
-    synth "${parts[i]}" "$wav"
-    if play "$wav"; then
-      i=$((i + 1))
-      continue
-    fi
-    # Resume only if you cut in briefly. Say something substantial and the
-    # rest of this is stale news -- picking it up again would be odd.
-    cut_at=$SECONDS
-    wait_for_mic || return 0
-    [ $((SECONDS - cut_at)) -lt 20 ] || return 0
-    synth "As I was saying." "$wav"
-    play "$wav"
-  done
-  return 0
+  mkdir -p "$STATE/spool"
+  jq -nc --arg l "$1" --arg t "$2" --arg h "$(hostname -s)" \
+    '{level: $l, text: $t, host: $h}' \
+    > "$STATE/spool/$(date +%s%N).$$.json"
 }
 
-# What this session is called, so you can tell agents apart by ear. agent-state
-# records it per tmux window keyed by the session that claimed the window.
+# What this session is called, so you can tell agents apart by ear.
+# agent-state records it per tmux window, keyed by the session that claimed
+# the window.
 title() {
   jq -r --arg o "$1" 'select(.owner == $o) | .title // empty' \
     "$HOME/.local/state/agent-slots"/*.json 2>/dev/null | head -1
@@ -126,10 +63,11 @@ answer() {
 }
 
 hook() {
-  local payload event name need line
+  local payload event session name need line
   payload=$(cat)
   event=$(jq -r '.hook_event_name // .type // empty' <<<"$payload")
-  name=$(title "$(jq -r '.session_id // empty' <<<"$payload")")
+  session=$(jq -r '.session_id // empty' <<<"$payload")
+  name=$(title "$session")
   name=${name:-$1}
 
   case $event in
@@ -140,19 +78,17 @@ hook() {
     Stop)
       need=updates
       line="$name is done."
-      # Away from the screen, what you actually want is the answer, not the
-      # fact that there is one -- unless the agent has been narrating, in
-      # which case it has already told you and reading its closing message
-      # back is just saying everything twice.
-      [ "$(level)" = narrate ] && [ -z "$(find "$NARRATED" -newermt '-3 minutes' 2>/dev/null)" ] &&
+      # Away from the screen, what you want is the answer, not the fact that
+      # there is one -- unless this session has been narrating, in which case
+      # it has already told you and reading its closing message back is just
+      # saying everything twice.
+      [ "$(level)" = narrate ] &&
+        [ -z "$(find "$STATE/narrated/$session" -newermt '-3 minutes' 2>/dev/null)" ] &&
         line="$name says. $(answer "$payload")"
       ;;
     *) return 0 ;;
   esac
-  # Detached: a hook must not hold the agent up for the length of a sentence.
-  setsid bash -c "$(declare -f rank level mic_busy speak); URL='$URL' VOICE='$VOICE' \
-    LOCK='$LOCK' LEVEL_FILE='$LEVEL_FILE' speak \"\$1\" \"\$2\"" _ "$need" "$line" \
-    >/dev/null 2>&1 &
+  spool "$need" "$line"
 }
 
 case ${1:-} in
@@ -167,10 +103,11 @@ case ${1:-} in
     level
     ;;
   -l)
-    speak "$2" "${*:3}"
+    spool "$2" "${*:3}"
     ;;
   *)
-    touch "$NARRATED"
-    speak narrate "${*:-$(cat)}"
+    mkdir -p "$STATE/narrated"
+    touch "$STATE/narrated/$SESSION"
+    spool narrate "${*:-$(cat)}"
     ;;
 esac

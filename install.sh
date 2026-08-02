@@ -113,11 +113,14 @@ if command -v jq &>/dev/null; then
   done
 fi
 
-# The TTS server is a systemd user unit, so it survives a reboot and restarts
-# itself. Enabling is a no-op once done.
+# Speech is two user units: the server that synthesises, and the daemon that
+# reads the spool aloud. Both survive a reboot; enabling is a no-op once done.
 if [ -d "$HOME/.local/share/kokoro-fastapi" ]; then
   systemctl --user daemon-reload
-  systemctl --user enable --now kokoro-tts.service &>/dev/null &&
-    echo "kokoro-tts: enabled"
+  systemctl --user enable --now kokoro-tts.service agent-say.service &>/dev/null &&
+    echo "kokoro-tts, agent-say: enabled"
+  # Without this the units die when you log out, which is exactly when you
+  # most want an agent to be able to shout.
+  loginctl enable-linger "$USER" &>/dev/null
 fi
 

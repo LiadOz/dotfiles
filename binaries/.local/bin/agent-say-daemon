@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Read out what agents have asked to say. The only thing here that plays
+# audio: agents just drop notes in the spool (see agent-say), and this reads
+# them one at a time, so nothing ever talks over anything else.
+#
+# Runs as a systemd user service alongside kokoro-tts, which does the actual
+# speech synthesis.
+set -u
+
+URL=${AGENT_SAY_URL:-http://127.0.0.1:8880/v1/audio/speech}
+VOICE=${AGENT_SAY_VOICE:-bf_emma}
+STATE=${XDG_STATE_HOME:-$HOME/.local/state}/agent-say
+SPOOL=$STATE/spool
+LEVEL_FILE=${XDG_CONFIG_HOME:-$HOME/.config}/agent-say/level
+
+rank() {
+  case $1 in
+    silent) echo 0 ;; alerts) echo 1 ;; narrate) echo 3 ;;
+    *)      echo 2 ;;  # updates, and anything unrecognised
+  esac
+}
+
+# A recording stream on the mic means handy is listening, or you are on a
+# call; either way, do not talk over you.
+mic_busy() { [ -n "$(pactl list short source-outputs 2>/dev/null)" ]; }
+
+wait_for_mic() {
+  for _ in $(seq 90); do
+    mic_busy || return 0
+    sleep 1
+  done
+  return 1  # you have been talking for a minute and a half; it can wait
+}
+
+synth() {  # $1 text -> raw audio in file $2
+  curl -sS -m 120 "$URL" -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg i "$1" --arg v "$VOICE" \
+          '{model:"kokoro", input:$i, voice:$v, response_format:"pcm"}')" > "$2"
+}
+
+# Play one sentence. Fails if you started talking part way through it.
+play() {
+  paplay --raw --format=s16le --rate=24000 --channels=1 "$1" &
+  local job=$! cut=0
+  while kill -0 "$job" 2>/dev/null; do
+    mic_busy && kill "$job" 2>/dev/null && cut=1 && break
+    sleep 0.2
+  done
+  wait "$job" 2>/dev/null
+  return $cut
+}
+
+# Picking up after you cut in. Mostly plain, because you will hear these
+# often; the last couple are rare enough to stay funny.
+RESUMES=(
+  "As I was saying."
+  "As I was saying."
+  "Where was I."
+  "Right. Continuing."
+  "Anyway."
+  "Back to it."
+  "So. As I was saying, before I was so rudely interrupted."
+  "Now, if I may finish."
+)
+
+# A sentence at a time, so that being interrupted has a place to resume from:
+# whichever sentence you cut off, said again from its start.
+say() {
+  local -a parts
+  mapfile -t parts < <(sed 's/\([.!?]\)  */\1\n/g' <<<"$1")
+  local cut_at i=0
+  while [ "$i" -lt "${#parts[@]}" ]; do
+    wait_for_mic || return 0
+    synth "${parts[i]}" "$WAV"
+    if play "$WAV"; then
+      i=$((i + 1))
+      continue
+    fi
+    # Resume only if you cut in briefly. Say something substantial and the
+    # rest of this is stale news -- picking it up again would be odd.
+    cut_at=$SECONDS
+    wait_for_mic || return 0
+    [ $((SECONDS - cut_at)) -lt 20 ] || return 0
+    synth "${RESUMES[RANDOM % ${#RESUMES[@]}]}" "$WAV"
+    play "$WAV"
+  done
+}
+
+WAV=$(mktemp)
+trap 'rm -f "$WAV"' EXIT
+mkdir -p "$SPOOL"
+
+while :; do
+  # Oldest first: the filenames are nanosecond timestamps.
+  note=$(find "$SPOOL" -maxdepth 1 -name '*.json' -printf '%f\n' 2>/dev/null | sort | head -1)
+  if [ -z "$note" ]; then
+    sleep 0.25
+    continue
+  fi
+  text=$(jq -r '.text' "$SPOOL/$note" 2>/dev/null)
+  need=$(jq -r '.level' "$SPOOL/$note" 2>/dev/null)
+  rm -f "$SPOOL/$note"
+
+  # Judge the level now rather than when it was written: turning the volume
+  # down should silence what is already queued, not just what comes next.
+  [ -n "$text" ] || continue
+  [ "$(rank "$need")" -le "$(rank "$(cat "$LEVEL_FILE" 2>/dev/null)")" ] || continue
+  # Notes queued behind a long silence, or copied late from a machine that
+  # could not reach us, are stale on arrival. Better quiet than yesterday's
+  # news. The filename is when it was written, which survives being copied.
+  [ "${note%%.*}" -gt $(( ($(date +%s) - 300) * 1000000000 )) ] || continue
+  say "$text"
+done
