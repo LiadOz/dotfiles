@@ -8,19 +8,14 @@
 set -u
 
 URL=${AGENT_SAY_URL:-http://127.0.0.1:8880/v1/audio/speech}
+PY=${AGENT_SAY_PYTHON:-$HOME/.local/share/tts-venv/bin/python}
 
 # One voice per agent, so you know who is talking before they say their name.
 # Chosen to be told apart easily: alternating accent and register rather than
 # eight pleasant voices that all sound alike.
-#
-# The gain after the colon is not decoration. Kokoro's voices differ by nine
-# decibels, so the quiet ones are hard to follow in a noisy room while the
-# loud ones are fine. Measured on one sentence each and levelled to about
-# -21 dBFS, capped where a voice would otherwise clip.
-VOICES=(bf_emma:1.3 bm_george:1.4 af_heart:1.7 am_michael:1.85
-        bf_isabella:0.9 am_fenrir:1.1 af_nova:2.5 bm_lewis:1.75)
+VOICES=(bf_emma bm_george af_heart am_michael bf_isabella am_fenrir af_nova bm_lewis)
 
-voice_for() {  # $1 session -> a voice:gain that will not change under it
+voice_for() {  # $1 session -> a voice that will not change under it
   local sum
   sum=$(cksum <<<"$1" | cut -d' ' -f1)
   echo "${VOICES[sum % ${#VOICES[@]}]}"
@@ -48,11 +43,27 @@ wait_for_mic() {
   return 1  # you have been talking for a minute and a half; it can wait
 }
 
-synth() {  # $1 text, $2 file, $3 voice, $4 gain
+# Kokoro's voices differ by nine decibels, and even the loudest is quiet
+# enough to lose in a noisy room. Level every sentence to the same place and
+# soft limit the peaks -- tanh rather than a hard ceiling, because clipped
+# speech crackles. Raises -21 dBFS to about -14 with 1% of samples touched.
+LEVELLER='
+import sys, numpy as np
+x = np.frombuffer(sys.stdin.buffer.read(), dtype="<i2").astype(np.float32)
+if x.size:
+    a = np.abs(x)
+    loud = x[a > 0.02 * a.max()]   # ignore the silence Kokoro pads short lines with
+    rms = float(np.sqrt((loud * loud).mean())) if loud.size else 0.0
+    if rms:
+        x *= 8000.0 / rms
+    sys.stdout.buffer.write((np.tanh(x / 30000.0) * 30000.0).astype("<i2").tobytes())
+'
+
+synth() {  # $1 text, $2 file, $3 voice
   curl -sS -m 120 "$URL" -H 'Content-Type: application/json' \
-    -d "$(jq -nc --arg i "$1" --arg v "$3" --argjson g "$4" \
-          '{model:"kokoro", input:$i, voice:$v, volume_multiplier:$g,
-            response_format:"pcm"}')" > "$2"
+    -d "$(jq -nc --arg i "$1" --arg v "$3" \
+          '{model:"kokoro", input:$i, voice:$v, response_format:"pcm"}')" |
+    "$PY" -c "$LEVELLER" > "$2"
 }
 
 # Play one sentence. Fails if you started talking part way through it.
@@ -82,13 +93,13 @@ RESUMES=(
 
 # A sentence at a time, so that being interrupted has a place to resume from:
 # whichever sentence you cut off, said again from its start.
-say() {  # $1 text, $2 voice, $3 gain
+say() {  # $1 text, $2 voice
   local -a parts
   mapfile -t parts < <(sed 's/\([.!?]\)  */\1\n/g' <<<"$1")
   local cut_at i=0
   while [ "$i" -lt "${#parts[@]}" ]; do
     wait_for_mic || return 0
-    synth "${parts[i]}" "$WAV" "$2" "$3"
+    synth "${parts[i]}" "$WAV" "$2"
     if play "$WAV"; then
       i=$((i + 1))
       continue
@@ -98,7 +109,7 @@ say() {  # $1 text, $2 voice, $3 gain
     cut_at=$SECONDS
     wait_for_mic || return 0
     [ $((SECONDS - cut_at)) -lt 20 ] || return 0
-    synth "${RESUMES[RANDOM % ${#RESUMES[@]}]}" "$WAV" "$2" "$3"
+    synth "${RESUMES[RANDOM % ${#RESUMES[@]}]}" "$WAV" "$2"
     play "$WAV"
   done
 }
@@ -153,6 +164,5 @@ while :; do
   [ "${note%%.*}" -gt $(( ($(date +%s) - 300) * 1000000000 )) ] || continue
   # Say who it is. The voice tells you at once; the name tells you which
   # piece of work, which the voice cannot.
-  pick=$(voice_for "$session")
-  say "${name:+$name. }$text" "${pick%%:*}" "${pick##*:}"
+  say "${name:+$name. }$text" "$(voice_for "$session")"
 done
