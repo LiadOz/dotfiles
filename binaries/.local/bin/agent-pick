@@ -120,13 +120,13 @@ def tmux_windows():
                             "#{window_index}", "#{window_name}",
                             "#{window_active}", "#{pane_current_command}",
                             "#{@agent_branch}", "#{@agent_added}",
-                            "#{@agent_removed}")))
+                            "#{@agent_removed}", "#{pid}")))
     if result.returncode != 0:
         sys.exit("agent-pick: no tmux server")
     found = {}
     for line in result.stdout.splitlines():
         parts = line.split(SEP)
-        if len(parts) == 9:
+        if len(parts) == 10:
             found[parts[0]] = parts[1:]
     return found
 
@@ -146,8 +146,12 @@ def collect():
     rows = []
     named = session_names()
     for slot, (_session, index, name, active, command, head,
-               added, removed) in tmux_windows().items():
+               added, removed, server) in tmux_windows().items():
         record = slots.get(slot)
+        if (record is not None
+                and (record.get("bound_by") != "pane"
+                     or record.get("server") != server)):
+            record = None
         # Same rule the status bar uses: a window running an agent counts as
         # one even before any hook has fired, otherwise the two disagree.
         if record is None and command in ("claude", "codex"):

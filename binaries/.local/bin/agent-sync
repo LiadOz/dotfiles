@@ -42,6 +42,7 @@ import time
 STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
 FOCUS_PATH = STATE_DIR / "focus"
 WINDOW_PATH = STATE_DIR / "windows"
+PANE_PATH = STATE_DIR / "panes"
 INTERVAL = float(os.environ.get("AGENT_SYNC_INTERVAL", "2"))
 GIT_TTL = 30  # keep Git work out of the two-second state sync path
 BASES = ("origin/master", "origin/main", "master", "main")
@@ -81,21 +82,35 @@ def tmux(*args):
                           check=False)
 
 
+def write_changed(path, text):
+    try:
+        if path.read_text() == text:
+            return
+    except OSError:
+        pass
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(text)
+    tmp.replace(path)
+
+
 def windows():
     """Return live windows and ones carrying agent options."""
-    result = tmux("list-windows", "-a", "-F",
+    result = tmux("list-panes", "-a", "-F",
                   SEP.join(("#{window_id}", "#{window_active}",
                             "#{@agent_state}", "#{pane_current_command}",
                             "#{session_name}", "#{window_index}",
-                            "#{window_name}", "#{@agent_title}")))
+                            "#{window_name}", "#{@agent_title}",
+                            "#{pid}", "#{pane_id}")))
     if result.returncode != 0:
         return None
     live = {}
     decorated = set()
     links = []
+    panes = {}
+    server = ""
     for line in result.stdout.splitlines():
         parts = line.split(SEP)
-        if len(parts) == 8:
+        if len(parts) == 10:
             active, commands = live.get(parts[0], (False, []))
             commands.append(parts[3])
             live[parts[0]] = (active or parts[1] == "1", commands)
@@ -104,18 +119,14 @@ def windows():
             links.append({"id": parts[0], "session": parts[4],
                           "index": parts[5], "name": parts[6],
                           "command": parts[3], "state": parts[2],
-                          "title": parts[7]})
+                          "title": parts[7], "pane": parts[9]})
+            server = parts[8]
+            panes[parts[9]] = parts[0]
 
-    encoded = json.dumps(links, sort_keys=True)
-    try:
-        unchanged = WINDOW_PATH.read_text() == encoded
-    except OSError:
-        unchanged = False
-    if not unchanged:
-        tmp = WINDOW_PATH.with_suffix(".tmp")
-        tmp.write_text(encoded)
-        tmp.replace(WINDOW_PATH)
-    return live, decorated
+    write_changed(WINDOW_PATH, json.dumps(links, sort_keys=True))
+    write_changed(PANE_PATH, json.dumps({"server": server, "panes": panes},
+                                       sort_keys=True))
+    return live, decorated, server
 
 
 def branch(path):
@@ -200,7 +211,7 @@ def sync_once():
     snapshot = windows()
     if snapshot is None:
         return False
-    live, decorated = snapshot
+    live, decorated, server = snapshot
 
     current = set()
     counts = {"blocked": 0, "done": 0}
@@ -214,15 +225,13 @@ def sync_once():
         if slot not in live:
             remove(path)  # window is gone for good
             continue
+        if record.get("bound_by") != "pane" or record.get("server") != server:
+            continue
 
         # Visiting the window is what clears a `done` marker. Deliberately
         # not applied to `blocked` -- looking at it is not answering it.
         active, commands = live[slot]
         at_shell = commands and all(command in SHELLS for command in commands)
-        if (record.get("bound_by") != "prompt"
-                and (record.get("state") == "free" or at_shell)):
-            remove(path)  # old record; never confirmed by a submitted prompt
-            continue
         if record.get("state") == "done" and active:
             write_state(path, record, "idle")
             record["state"] = "idle"
