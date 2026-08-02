@@ -41,7 +41,6 @@ import time
 # Shared by the tmux host and the LSF exec host.
 STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
 FOCUS_PATH = STATE_DIR / "focus"
-PANE_PATH = STATE_DIR / "panes"
 INTERVAL = float(os.environ.get("AGENT_SYNC_INTERVAL", "2"))
 GIT_TTL = 30  # keep Git work out of the two-second state sync path
 BASES = ("origin/master", "origin/main", "master", "main")
@@ -85,32 +84,19 @@ def windows():
     """Return live windows and ones carrying agent options."""
     result = tmux("list-panes", "-a", "-F",
                   SEP.join(("#{window_id}", "#{window_active}",
-                            "#{pane_id}", "#{@agent_state}",
-                            "#{pane_current_command}")))
+                            "#{@agent_state}", "#{pane_current_command}")))
     if result.returncode != 0:
         return None
     live = {}
     decorated = set()
-    panes = {}
     for line in result.stdout.splitlines():
         parts = line.split(SEP)
-        if len(parts) == 5:
+        if len(parts) == 4:
             if parts[0] not in live:
                 live[parts[0]] = (parts[1] == "1", [])
-            live[parts[0]][1].append(parts[4])
-            panes[parts[2]] = parts[0]
-            if parts[3]:
+            live[parts[0]][1].append(parts[3])
+            if parts[2]:
                 decorated.add(parts[0])
-
-    encoded = json.dumps(panes, sort_keys=True)
-    try:
-        unchanged = PANE_PATH.read_text() == encoded
-    except OSError:
-        unchanged = False
-    if not unchanged:
-        tmp = PANE_PATH.with_suffix(".tmp")
-        tmp.write_text(encoded)
-        tmp.replace(PANE_PATH)
     return live, decorated
 
 
@@ -216,8 +202,9 @@ def sync_once(decorated):
         # not applied to `blocked` -- looking at it is not answering it.
         active, commands = live[slot]
         at_shell = commands and all(command in SHELLS for command in commands)
-        if not record.get("pane") and (record.get("state") == "free" or at_shell):
-            remove(path)  # old focus-based record; not a verified agent pane
+        if (record.get("bound_by") != "prompt"
+                and (record.get("state") == "free" or at_shell)):
+            remove(path)  # old record; never confirmed by a submitted prompt
             continue
         if record.get("state") == "done" and active:
             write_state(path, record, "idle")
