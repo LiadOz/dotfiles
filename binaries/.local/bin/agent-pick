@@ -31,8 +31,9 @@ STATES = {
     "done":    (1, "DONE ", "\033[38;5;154m"),  # matches the activity colour
     "working": (2, "WORK ", "\033[33m"),
     "idle":    (3, "IDLE ", "\033[90m"),  # agent present, nothing pending
+    "free":    (4, "FREE ", "\033[38;5;180m"),  # shell ready for reuse
 }
-PLAIN = (4, "     ", "")                         # not an agent window
+PLAIN = (5, "     ", "")                         # not an agent window
 RESET = "\033[0m"
 DIM = "\033[90m"
 GREEN = "\033[32m"
@@ -209,7 +210,7 @@ def main():
     fzf = subprocess.run(
         ("fzf", "--ansi", "--reverse", "--delimiter=" + SEP, "--with-nth=2..",
          "--no-sort", "--info=inline", "--prompt=window > ",
-         "--header=BLOCK needs you   DONE unseen   WORK running   (ctrl-/ hides preview)",
+         "--header=BLOCK needs you   DONE unseen   WORK running   FREE reusable   (ctrl-/ hides preview)",
          "--preview", PREVIEW, "--preview-window", "right:55%:wrap",
          "--bind", "ctrl-/:toggle-preview"),
         input="\n".join(render(rows)), stdout=subprocess.PIPE, universal_newlines=True,

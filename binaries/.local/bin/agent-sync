@@ -41,6 +41,7 @@ import time
 # Shared by the tmux host and the LSF exec host.
 STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
 FOCUS_PATH = STATE_DIR / "focus"
+PANE_PATH = STATE_DIR / "panes"
 INTERVAL = float(os.environ.get("AGENT_SYNC_INTERVAL", "2"))
 GIT_TTL = 30  # keep Git work out of the two-second state sync path
 BASES = ("origin/master", "origin/main", "master", "main")
@@ -53,6 +54,7 @@ SEP = ":::"
 
 OPTIONS = ("@agent_state", "@agent_title", "@agent_kind", "@agent_cwd",
            "@agent_branch", "@agent_added", "@agent_removed")
+SHELLS = ("bash", "fish", "ksh", "sh", "tcsh", "zsh")
 
 _branches = {}  # cwd -> (branch, when)
 _diffstats = {}  # cwd -> ((added, removed), when)
@@ -80,17 +82,36 @@ def tmux(*args):
 
 
 def windows():
-    """window_id -> is it the active window of its session"""
-    result = tmux("list-windows", "-a", "-F",
-                  SEP.join(("#{window_id}", "#{window_active}")))
+    """Return live windows and ones carrying agent options."""
+    result = tmux("list-panes", "-a", "-F",
+                  SEP.join(("#{window_id}", "#{window_active}",
+                            "#{pane_id}", "#{@agent_state}",
+                            "#{pane_current_command}")))
     if result.returncode != 0:
         return None
-    found = {}
+    live = {}
+    decorated = set()
+    panes = {}
     for line in result.stdout.splitlines():
         parts = line.split(SEP)
-        if len(parts) == 2:
-            found[parts[0]] = parts[1] == "1"
-    return found
+        if len(parts) == 5:
+            if parts[0] not in live:
+                live[parts[0]] = (parts[1] == "1", [])
+            live[parts[0]][1].append(parts[4])
+            panes[parts[2]] = parts[0]
+            if parts[3]:
+                decorated.add(parts[0])
+
+    encoded = json.dumps(panes, sort_keys=True)
+    try:
+        unchanged = PANE_PATH.read_text() == encoded
+    except OSError:
+        unchanged = False
+    if not unchanged:
+        tmp = PANE_PATH.with_suffix(".tmp")
+        tmp.write_text(encoded)
+        tmp.replace(PANE_PATH)
+    return live, decorated
 
 
 def branch(path):
@@ -163,8 +184,8 @@ def apply(window, record):
     tmux("set-option", "-w", "-t", window, "monitor-activity", "off")
 
 
-def mark_seen(path, record):
-    record["state"] = "idle"
+def write_state(path, record, state):
+    record["state"] = state
     record["since"] = int(time.time())
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(record))
@@ -172,9 +193,11 @@ def mark_seen(path, record):
 
 
 def sync_once(decorated):
-    live = windows()
-    if live is None:
+    snapshot = windows()
+    if snapshot is None:
         return decorated
+    live, existing = snapshot
+    decorated |= existing
 
     current = set()
     counts = {"blocked": 0, "done": 0}
@@ -191,9 +214,14 @@ def sync_once(decorated):
 
         # Visiting the window is what clears a `done` marker. Deliberately
         # not applied to `blocked` -- looking at it is not answering it.
-        if record.get("state") == "done" and live[slot]:
-            mark_seen(path, record)
+        active, commands = live[slot]
+        if record.get("state") == "done" and active:
+            write_state(path, record, "idle")
             record["state"] = "idle"
+        elif (record.get("state") != "free" and commands
+              and all(command in SHELLS for command in commands)):
+            write_state(path, record, "free")
+            record["state"] = "free"
 
         apply(slot, record)
         current.add(slot)
