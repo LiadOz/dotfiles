@@ -14,7 +14,7 @@
 #   silent   nothing at all -- reading along, on a call, not alone
 #   alerts   only when an agent is blocked on you
 #   updates  ...and when one finishes, by name, so you know who wants you
-#   narrate  ...and agents talking freely as they work
+#   narrate  ...and agents talking freely, and reading you their answer
 #
 # Speech comes from Kokoro-FastAPI on localhost -- an OpenAI-compatible TTS
 # server keeping the model warm on the GPU (systemctl --user status kokoro-tts).
@@ -34,14 +34,26 @@ rank() {
   esac
 }
 
+level() { cat "$LEVEL_FILE" 2>/dev/null || echo updates; }
+
 # $1 minimum level this is worth hearing at, $2 what to say.
 speak() {
   [ -n "${2// /}" ] || return 0
-  [ "$(rank "$1")" -le "$(rank "$(cat "$LEVEL_FILE" 2>/dev/null)")" ] || return 0
-  # Serialise: several agents finishing together should queue, not talk over
-  # each other. -w gives up rather than piling up a backlog of stale news.
-  flock -w 30 "$LOCK" curl -sS -m 60 "$URL" \
-    -H 'Content-Type: application/json' \
+  [ "$(rank "$1")" -le "$(rank "$(level)")" ] || return 0
+
+  # Hold the lock across the playback, not just the fetch -- releasing it when
+  # curl exits let the next agent start talking over the tail of this one.
+  exec 9>"$LOCK"
+  flock -w 60 9 || return 0
+
+  # Do not talk over you while you dictate. A recording stream on the mic
+  # means handy is listening, or you are on a call; either way, wait.
+  for _ in $(seq 90); do
+    [ -n "$(pactl list short source-outputs 2>/dev/null)" ] || break
+    sleep 1
+  done
+
+  curl -sS -m 120 "$URL" -H 'Content-Type: application/json' \
     -d "$(jq -nc --arg i "$2" --arg v "$VOICE" \
           '{model:"kokoro", input:$i, voice:$v, response_format:"pcm"}')" |
     paplay --raw --format=s16le --rate=24000 --channels=1
@@ -52,6 +64,20 @@ speak() {
 title() {
   jq -r --arg o "$1" 'select(.owner == $o) | .title // empty' \
     "$HOME/.local/state/agent-slots"/*.json 2>/dev/null | head -1
+}
+
+# The agent's closing message, for reading back at `narrate`. codex hands it
+# over directly; claude only points at the transcript.
+answer() {
+  local text
+  text=$(jq -r '.last_assistant_message // empty' <<<"$1")
+  if [ -z "$text" ]; then
+    text=$(jq -r 'select(.type == "assistant") | .message.content[]?
+                  | select(.type == "text") | .text' \
+           "$(jq -r '.transcript_path // "/dev/null"' <<<"$1")" 2>/dev/null | tail -1)
+  fi
+  # Code and tables are unlistenable, and a long answer outlives your patience.
+  sed -e '/^```/,/^```/d' -e 's/[|#*`]//g' <<<"$text" | tr -s ' \n' ' ' | cut -c1-1500
 }
 
 hook() {
@@ -66,12 +92,19 @@ hook() {
     # we could infer, so pass it through.
     Notification)      need=alerts;  line="$name. $(jq -r '.message // "needs you"' <<<"$payload")" ;;
     PermissionRequest) need=alerts;  line="$name is asking permission." ;;
-    Stop)              need=updates; line="$name is done." ;;
-    *)                 return 0 ;;
+    Stop)
+      need=updates
+      line="$name is done."
+      # Away from the screen, what you actually want is the answer, not the
+      # fact that there is one.
+      [ "$(level)" = narrate ] && line="$name says. $(answer "$payload")"
+      ;;
+    *) return 0 ;;
   esac
   # Detached: a hook must not hold the agent up for the length of a sentence.
-  setsid bash -c "$(declare -f rank speak); URL='$URL' VOICE='$VOICE' LOCK='$LOCK' \
-    LEVEL_FILE='$LEVEL_FILE' speak \"\$1\" \"\$2\"" _ "$need" "$line" >/dev/null 2>&1 &
+  setsid bash -c "$(declare -f rank level speak); URL='$URL' VOICE='$VOICE' \
+    LOCK='$LOCK' LEVEL_FILE='$LEVEL_FILE' speak \"\$1\" \"\$2\"" _ "$need" "$line" \
+    >/dev/null 2>&1 &
 }
 
 case ${1:-} in
@@ -83,7 +116,7 @@ case ${1:-} in
       mkdir -p "$(dirname "$LEVEL_FILE")"
       printf '%s\n' "$2" > "$LEVEL_FILE"
     fi
-    cat "$LEVEL_FILE" 2>/dev/null || echo updates
+    level
     ;;
   -l)
     speak "$2" "${*:3}"
