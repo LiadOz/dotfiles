@@ -215,11 +215,14 @@ def sync_once(decorated):
         # Visiting the window is what clears a `done` marker. Deliberately
         # not applied to `blocked` -- looking at it is not answering it.
         active, commands = live[slot]
+        at_shell = commands and all(command in SHELLS for command in commands)
+        if not record.get("pane") and (record.get("state") == "free" or at_shell):
+            remove(path)  # old focus-based record; not a verified agent pane
+            continue
         if record.get("state") == "done" and active:
             write_state(path, record, "idle")
             record["state"] = "idle"
-        elif (record.get("state") != "free" and commands
-              and all(command in SHELLS for command in commands)):
+        elif record.get("state") != "free" and at_shell:
             write_state(path, record, "free")
             record["state"] = "free"
 

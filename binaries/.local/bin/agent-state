@@ -120,6 +120,8 @@ def load():
 def save(record):
     target = path()
     record["slot"] = target.stem
+    if os.environ.get("TMUX_PANE"):
+        record["pane"] = os.environ["TMUX_PANE"]
     if _hook_owner:
         record["owner"] = _hook_owner
     else:
@@ -198,16 +200,21 @@ def cmd_hook(args):
     _hook_owner = owner(data)
     event = data.get("hook_event_name") or data.get("type", "")
 
-    if event in ("SessionEnd", "agent-turn-end"):
-        set_state("free", agent=kind, cwd=data.get("cwd", ""),
-                  thread=thread_id(data))
-        return
-
     # codex's older notify path only ever reports turn completion
     if event == "agent-turn-complete":
         event = "Stop"
 
-    if event not in EVENTS:
+    ending = event in ("SessionEnd", "agent-turn-end")
+    if event not in EVENTS and not ending:
+        return
+
+    record = load()
+    if event != "SessionStart" and record.get("owner") != _hook_owner:
+        remove(path())
+        record = {}
+    if ending:
+        set_state("free", agent=kind, cwd=data.get("cwd", ""),
+                  thread=thread_id(data))
         return
 
     state = EVENTS[event]
@@ -216,7 +223,7 @@ def cmd_hook(args):
         # Codex can restart within the same thread (for example after a
         # compaction). Keep the name and cwd that agent chose for that
         # thread; only a genuinely new occupant resets the slot.
-        previous = load()
+        previous = record
         same_owner = previous.get("owner") == _hook_owner
         record = {"state": "idle", "since": int(time.time()),
                   "agent": kind, "cwd": data.get("cwd", ""),
@@ -229,8 +236,6 @@ def cmd_hook(args):
                            "cwd_by": "agent"})
         save(record)
         return
-
-    record = load()
 
     # PostToolUse fires on every tool call, so keep it cheap: it exists only
     # to clear `blocked` once you have answered, and is a no-op otherwise.
