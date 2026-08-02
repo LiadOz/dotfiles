@@ -26,6 +26,9 @@ URL=${AGENT_SAY_URL:-http://127.0.0.1:8880/v1/audio/speech}
 VOICE=${AGENT_SAY_VOICE:-bf_emma}
 LOCK=${XDG_RUNTIME_DIR:-/tmp}/agent-say.lock
 LEVEL_FILE=${XDG_CONFIG_HOME:-$HOME/.config}/agent-say/level
+NARRATED=${XDG_RUNTIME_DIR:-/tmp}/agent-say.narrated
+
+mic_busy() { [ -n "$(pactl list short source-outputs 2>/dev/null)" ]; }
 
 rank() {
   case $1 in
@@ -46,17 +49,28 @@ speak() {
   exec 9>"$LOCK"
   flock -w 60 9 || return 0
 
-  # Do not talk over you while you dictate. A recording stream on the mic
-  # means handy is listening, or you are on a call; either way, wait.
+  # Do not talk over you. A recording stream on the mic means handy is
+  # listening, or you are on a call; either way, wait for it to go away.
   for _ in $(seq 90); do
-    [ -n "$(pactl list short source-outputs 2>/dev/null)" ] || break
+    mic_busy || break
     sleep 1
   done
 
-  curl -sS -m 120 "$URL" -H 'Content-Type: application/json' \
-    -d "$(jq -nc --arg i "$2" --arg v "$VOICE" \
-          '{model:"kokoro", input:$i, voice:$v, response_format:"pcm"}')" |
-    paplay --raw --format=s16le --rate=24000 --channels=1
+  { curl -sS -m 120 "$URL" -H 'Content-Type: application/json' \
+      -d "$(jq -nc --arg i "$2" --arg v "$VOICE" \
+            '{model:"kokoro", input:$i, voice:$v, response_format:"pcm"}')" |
+      paplay --raw --format=s16le --rate=24000 --channels=1; } &
+  local job=$!
+  # ...and if you start talking part way through, stop, the way a person
+  # would. The rest of the sentence is dropped: you interrupted for a reason.
+  # Matching on the command line is precise enough because the lock above
+  # means this is the only playback running. Killing it also ends the curl
+  # feeding it, via SIGPIPE.
+  while kill -0 "$job" 2>/dev/null; do
+    mic_busy && pkill -f 'paplay --raw --format=s16le --rate=24000' && break
+    sleep 0.2
+  done
+  wait "$job" 2>/dev/null
 }
 
 # What this session is called, so you can tell agents apart by ear. agent-state
@@ -96,13 +110,16 @@ hook() {
       need=updates
       line="$name is done."
       # Away from the screen, what you actually want is the answer, not the
-      # fact that there is one.
-      [ "$(level)" = narrate ] && line="$name says. $(answer "$payload")"
+      # fact that there is one -- unless the agent has been narrating, in
+      # which case it has already told you and reading its closing message
+      # back is just saying everything twice.
+      [ "$(level)" = narrate ] && [ -z "$(find "$NARRATED" -newermt '-3 minutes' 2>/dev/null)" ] &&
+        line="$name says. $(answer "$payload")"
       ;;
     *) return 0 ;;
   esac
   # Detached: a hook must not hold the agent up for the length of a sentence.
-  setsid bash -c "$(declare -f rank level speak); URL='$URL' VOICE='$VOICE' \
+  setsid bash -c "$(declare -f rank level mic_busy speak); URL='$URL' VOICE='$VOICE' \
     LOCK='$LOCK' LEVEL_FILE='$LEVEL_FILE' speak \"\$1\" \"\$2\"" _ "$need" "$line" \
     >/dev/null 2>&1 &
 }
@@ -122,6 +139,7 @@ case ${1:-} in
     speak "$2" "${*:3}"
     ;;
   *)
+    touch "$NARRATED"
     speak narrate "${*:-$(cat)}"
     ;;
 esac
