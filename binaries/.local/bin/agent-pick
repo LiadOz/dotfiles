@@ -9,7 +9,6 @@ group is the work that has been waiting longest.
 """
 import glob
 import json
-import os
 import sqlite3
 import pathlib
 import subprocess
@@ -39,12 +38,8 @@ DIM = "\033[90m"
 GREEN = "\033[32m"
 RED = "\033[31m"
 
-# Branches to measure a worktree against, best first. Falls back to HEAD,
-# which reduces the count to just the uncommitted changes.
-BASES = ("origin/master", "origin/main", "master", "main")
-
-# claude writes one of these per running session, keyed by pid, holding the
-# name from /rename.
+# claude writes one of these per running session, holding the name from
+# /rename and the session id also stored by agent-state.
 CLAUDE_SESSIONS = pathlib.Path.home() / ".claude/sessions"
 
 # codex keeps thread titles in sqlite rather than one file per session, and
@@ -69,7 +64,7 @@ PREVIEW = (
 
 
 def session_names():
-    """pid -> the name you gave that claude session with /rename."""
+    """session id -> the name you gave that claude session with /rename."""
     named = {}
     if not CLAUDE_SESSIONS.is_dir():
         return named
@@ -80,9 +75,9 @@ def session_names():
             continue
         # "derived" is claude's own auto-name, e.g. prgit-rbs-91 -- less
         # informative than anything else we could show.
-        if (record.get("pid") and record.get("name")
+        if (record.get("sessionId") and record.get("name")
                 and record.get("nameSource") != "derived"):
-            named[int(record["pid"])] = record["name"]
+            named[record["sessionId"]] = record["name"]
     return named
 
 
@@ -112,43 +107,6 @@ def codex_title(record):
     return (row[0] or "")[:44] if row else ""
 
 
-def child_pids():
-    """ppid -> [pid]. Read once; walking /proc per window would be silly."""
-    children = {}
-    for entry in pathlib.Path("/proc").iterdir():
-        if not entry.name.isdigit():
-            continue
-        try:
-            stat = (entry / "stat").read_text()
-        except OSError:
-            continue
-        # Split on the last ')' -- a process name can contain spaces and
-        # parens, which is exactly what breaks naive field splitting.
-        fields = stat.rsplit(")", 1)[-1].split()
-        if len(fields) >= 2:
-            children.setdefault(int(fields[1]), []).append(int(entry.name))
-    return children
-
-
-def name_under(pane_pid, children, named):
-    """The session name of whichever agent runs inside this pane.
-
-    A window with no state file is spotted by process name alone, so there
-    is no session id to look up -- but the agent is a descendant of the
-    pane, and the sessions index is keyed by pid.
-    """
-    seen, stack = set(), [pane_pid]
-    while stack:
-        pid = stack.pop()
-        if pid in named:
-            return named[pid]
-        for child in children.get(pid, ()):
-            if child not in seen:
-                seen.add(child)
-                stack.append(child)
-    return ""
-
-
 def tmux(*args):
     return subprocess.run(("tmux",) + args, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE, universal_newlines=True,
@@ -160,13 +118,14 @@ def tmux_windows():
                   SEP.join(("#{window_id}", "#{session_name}",
                             "#{window_index}", "#{window_name}",
                             "#{window_active}", "#{pane_current_command}",
-                            "#{pane_pid}")))
+                            "#{@agent_branch}", "#{@agent_added}",
+                            "#{@agent_removed}")))
     if result.returncode != 0:
         sys.exit("agent-pick: no tmux server")
     found = {}
     for line in result.stdout.splitlines():
         parts = line.split(SEP)
-        if len(parts) == 7:
+        if len(parts) == 9:
             found[parts[0]] = parts[1:]
     return found
 
@@ -181,60 +140,12 @@ def states():
     return found
 
 
-def branch(path):
-    """Branch of the worktree the agent is in, if it is in one."""
-    if not path or not os.path.isdir(path):
-        return ""
-    head = subprocess.run(
-        ("git", "-C", path, "rev-parse", "--abbrev-ref", "HEAD"),
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        universal_newlines=True, check=False,
-    )
-    return head.stdout.strip() if head.returncode == 0 else ""
-
-
-def diffstat(path):
-    """Lines added/removed in this worktree relative to its base branch.
-
-    Measured against the merge-base, not HEAD, so the count still means
-    something after the agent has committed -- which it usually has.
-    Comparing the worktree to that base covers committed and uncommitted
-    work in one number.
-    """
-    if not path or not os.path.isdir(path):
-        return 0, 0
-    base = "HEAD"
-    for candidate in BASES:
-        found = subprocess.run(
-            ("git", "-C", path, "merge-base", "HEAD", candidate),
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            universal_newlines=True, check=False,
-        )
-        if found.returncode == 0 and found.stdout.strip():
-            base = found.stdout.strip()
-            break
-    numstat = subprocess.run(
-        ("git", "-C", path, "diff", "--numstat", base),
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        universal_newlines=True, check=False,
-    )
-    if numstat.returncode != 0:
-        return 0, 0
-    added = removed = 0
-    for line in numstat.stdout.splitlines():
-        cols = line.split("\t")
-        if len(cols) >= 2:
-            added += int(cols[0]) if cols[0].isdigit() else 0
-            removed += int(cols[1]) if cols[1].isdigit() else 0
-    return added, removed
-
-
 def collect():
     slots = states()
     rows = []
-    children, named = child_pids(), session_names()
-    for slot, (session, index, name, active, command,
-               pane_pid) in tmux_windows().items():
+    named = session_names()
+    for slot, (_session, index, name, active, command, head,
+               added, removed) in tmux_windows().items():
         record = slots.get(slot)
         # Same rule the status bar uses: a window running an agent counts as
         # one even before any hook has fired, otherwise the two disagree.
@@ -246,8 +157,6 @@ def collect():
             added = removed = 0
         else:
             rank, icon, colour = STATES.get(record.get("state", ""), STATES["idle"])
-            # Live name first: a stored title is a snapshot and goes stale
-            # the moment you /rename.
             # Live name first, per agent: a stored title is a snapshot and
             # goes stale the moment the session is renamed.
             # A name someone chose beats one that was derived: your
@@ -255,12 +164,13 @@ def collect():
             # title, then the opening prompt.
             agent_named = (record.get("title")
                            if record.get("title_by") == "agent" else "")
-            label = (name_under(int(pane_pid), children, named)
+            label = (named.get(record.get("owner", ""))
                      or agent_named
-                     or codex_title(record)
+                     or (codex_title(record)
+                         if record.get("agent") == "codex" else "")
                      or record.get("title") or name)
-            head = branch(record.get("cwd", ""))
-            added, removed = diffstat(record.get("cwd", ""))
+            added = int(added or 0)
+            removed = int(removed or 0)
         rows.append({
             "slot": slot, "index": index, "label": label,
             "branch": head, "added": added, "removed": removed,

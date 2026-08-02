@@ -90,8 +90,11 @@ def slot_from_owner(value):
 
 
 def slot():
+    agent_owner = (os.environ.get("CODEX_THREAD_ID")
+                   or os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
     value = (os.environ.get("AGENT_SLOT") or slot_from_tmux()
              or (_hook_owner and slot_from_owner(_hook_owner))
+             or slot_from_owner(agent_owner)
              or slot_from_focus())
     if not value:
         sys.exit(0)
@@ -277,6 +280,7 @@ def cmd_title(args):
     record = load()
     record["title"] = " ".join(args).strip()
     record["title_by"] = "agent"
+    record["cwd"] = os.getcwd()
     record.setdefault("state", "idle")
     record.setdefault("since", int(time.time()))
     save(record)

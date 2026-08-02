@@ -31,7 +31,9 @@ Once you know what you are actually working on, run:
 
     agent-state name '<short description>'
 
-Under about 40 characters, lowercase, no trailing punctuation.
+Run it from the worktree you are using so the picker shows its branch and
+diff. Keep it under about 40 characters, lowercase, with no trailing
+punctuation.
 
 Then keep it. The name is how I find this session again, so it should stay
 recognisable for as long as we are on the same task. Treat renaming as the
