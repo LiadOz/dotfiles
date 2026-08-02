@@ -331,9 +331,10 @@ def single_instance(server):
 
 
 def main():
-    # Old tmux servers may retain this removed hook until the config is
-    # reloaded. Keep it silent during that migration.
+    # Let a retained old hook load the config that removes it. This makes an
+    # existing tmux server upgrade itself on the next window switch.
     if len(sys.argv) == 3 and sys.argv[1] == "focus":
+        tmux("source-file", str(pathlib.Path.home() / ".tmux.agents.conf"))
         return
     if len(sys.argv) == 3 and sys.argv[1] == "migrate":
         try:
