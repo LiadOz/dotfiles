@@ -41,6 +41,7 @@ import time
 # Shared by the tmux host and the LSF exec host.
 STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
 FOCUS_PATH = STATE_DIR / "focus"
+WINDOW_PATH = STATE_DIR / "windows"
 INTERVAL = float(os.environ.get("AGENT_SYNC_INTERVAL", "2"))
 GIT_TTL = 30  # keep Git work out of the two-second state sync path
 BASES = ("origin/master", "origin/main", "master", "main")
@@ -82,21 +83,38 @@ def tmux(*args):
 
 def windows():
     """Return live windows and ones carrying agent options."""
-    result = tmux("list-panes", "-a", "-F",
+    result = tmux("list-windows", "-a", "-F",
                   SEP.join(("#{window_id}", "#{window_active}",
-                            "#{@agent_state}", "#{pane_current_command}")))
+                            "#{@agent_state}", "#{pane_current_command}",
+                            "#{session_name}", "#{window_index}",
+                            "#{window_name}", "#{@agent_title}")))
     if result.returncode != 0:
         return None
     live = {}
     decorated = set()
+    links = []
     for line in result.stdout.splitlines():
         parts = line.split(SEP)
-        if len(parts) == 4:
-            if parts[0] not in live:
-                live[parts[0]] = (parts[1] == "1", [])
-            live[parts[0]][1].append(parts[3])
+        if len(parts) == 8:
+            active, commands = live.get(parts[0], (False, []))
+            commands.append(parts[3])
+            live[parts[0]] = (active or parts[1] == "1", commands)
             if parts[2]:
                 decorated.add(parts[0])
+            links.append({"id": parts[0], "session": parts[4],
+                          "index": parts[5], "name": parts[6],
+                          "command": parts[3], "state": parts[2],
+                          "title": parts[7]})
+
+    encoded = json.dumps(links, sort_keys=True)
+    try:
+        unchanged = WINDOW_PATH.read_text() == encoded
+    except OSError:
+        unchanged = False
+    if not unchanged:
+        tmp = WINDOW_PATH.with_suffix(".tmp")
+        tmp.write_text(encoded)
+        tmp.replace(WINDOW_PATH)
     return live, decorated
 
 
@@ -178,12 +196,11 @@ def write_state(path, record, state):
     tmp.replace(path)
 
 
-def sync_once(decorated):
+def sync_once():
     snapshot = windows()
     if snapshot is None:
-        return decorated
-    live, existing = snapshot
-    decorated |= existing
+        return False
+    live, decorated = snapshot
 
     current = set()
     counts = {"blocked": 0, "done": 0}
@@ -218,16 +235,20 @@ def sync_once(decorated):
         if record.get("state") in counts:
             counts[record["state"]] += 1
 
+    clear = []
     for slot in decorated - current:
         if slot in live:
             for option in OPTIONS:
-                tmux("set-option", "-w", "-t", slot, "-u", option)
-            tmux("set-option", "-w", "-t", slot, "-u", "monitor-activity")
+                clear.extend(("set-option", "-w", "-t", slot, "-u", option, ";"))
+            clear.extend(("set-option", "-w", "-t", slot, "-u",
+                          "monitor-activity", ";"))
+    if clear:
+        tmux(*clear[:-1])
 
     tmux("set-option", "-g", "@agent_blocked", str(counts["blocked"]))
     tmux("set-option", "-g", "@agent_done", str(counts["done"]))
 
-    return current
+    return True
 
 
 def single_instance():
@@ -255,12 +276,10 @@ def main():
         return
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     _lock = single_instance()  # noqa: F841 -- must outlive main()
-    if windows() is None:
-        sys.exit("agent-sync: no tmux server")
-    decorated = set()
     while True:
         try:
-            decorated = sync_once(decorated)
+            if not sync_once():
+                sys.exit("agent-sync: no tmux server")
         except Exception as exc:  # one bad cycle must not kill the daemon
             print(f"agent-sync: {exc}", file=sys.stderr)
         time.sleep(INTERVAL)
