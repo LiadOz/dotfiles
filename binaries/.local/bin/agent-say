@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
 # Say something out loud, so an agent can talk back to you.
 #
-#   agent-say "the build is done"
-#   echo "the build is done" | agent-say
-#   agent-say hook claude          # from a hook, with the payload on stdin
+#   agent-say "the build is done"      # free-form; only heard at `narrate`
+#   agent-say -l alerts "I am stuck"   # speak unless you have gone silent
+#   agent-say hook claude|codex        # from a hook, payload on stdin
+#   agent-say level updates            # how much you want to hear, right now
+#   agent-say level                    # what it is set to
+#
+# The level describes you, not the agent: whether you are looking at the
+# screen. So it is one global setting, and turning it down quietens every
+# agent on the machine at once, including ones already running.
+#
+#   silent   nothing at all -- reading along, on a call, not alone
+#   alerts   only when an agent is blocked on you
+#   updates  ...and when one finishes, by name, so you know who wants you
+#   narrate  ...and agents talking freely as they work
 #
 # Speech comes from Kokoro-FastAPI on localhost -- an OpenAI-compatible TTS
 # server keeping the model warm on the GPU (systemctl --user status kokoro-tts).
@@ -14,14 +25,24 @@ set -u
 URL=${AGENT_SAY_URL:-http://127.0.0.1:8880/v1/audio/speech}
 VOICE=${AGENT_SAY_VOICE:-bf_emma}
 LOCK=${XDG_RUNTIME_DIR:-/tmp}/agent-say.lock
+LEVEL_FILE=${XDG_CONFIG_HOME:-$HOME/.config}/agent-say/level
 
+rank() {
+  case $1 in
+    silent) echo 0 ;; alerts) echo 1 ;; narrate) echo 3 ;;
+    *)      echo 2 ;;  # updates, and anything unrecognised
+  esac
+}
+
+# $1 minimum level this is worth hearing at, $2 what to say.
 speak() {
-  [ -n "${1// /}" ] || return 0
+  [ -n "${2// /}" ] || return 0
+  [ "$(rank "$1")" -le "$(rank "$(cat "$LEVEL_FILE" 2>/dev/null)")" ] || return 0
   # Serialise: several agents finishing together should queue, not talk over
   # each other. -w gives up rather than piling up a backlog of stale news.
   flock -w 30 "$LOCK" curl -sS -m 60 "$URL" \
     -H 'Content-Type: application/json' \
-    -d "$(jq -nc --arg i "$1" --arg v "$VOICE" \
+    -d "$(jq -nc --arg i "$2" --arg v "$VOICE" \
           '{model:"kokoro", input:$i, voice:$v, response_format:"pcm"}')" |
     paplay --raw --format=s16le --rate=24000 --channels=1
 }
@@ -34,28 +55,40 @@ title() {
 }
 
 hook() {
-  local payload event owner name line
+  local payload event name need line
   payload=$(cat)
   event=$(jq -r '.hook_event_name // .type // empty' <<<"$payload")
-  owner=$(jq -r '.session_id // empty' <<<"$payload")
-  name=$(title "$owner")
+  name=$(title "$(jq -r '.session_id // empty' <<<"$payload")")
   name=${name:-$1}
 
   case $event in
     # Claude phrases its own notification; it is more specific than anything
     # we could infer, so pass it through.
-    Notification)      line="$name. $(jq -r '.message // "needs you"' <<<"$payload")" ;;
-    PermissionRequest) line="$name is asking permission." ;;
-    Stop)              line="$name is done." ;;
+    Notification)      need=alerts;  line="$name. $(jq -r '.message // "needs you"' <<<"$payload")" ;;
+    PermissionRequest) need=alerts;  line="$name is asking permission." ;;
+    Stop)              need=updates; line="$name is done." ;;
     *)                 return 0 ;;
   esac
   # Detached: a hook must not hold the agent up for the length of a sentence.
-  setsid bash -c "$(declare -f speak); URL='$URL' VOICE='$VOICE' LOCK='$LOCK' speak \"\$1\"" _ "$line" \
-    >/dev/null 2>&1 &
+  setsid bash -c "$(declare -f rank speak); URL='$URL' VOICE='$VOICE' LOCK='$LOCK' \
+    LEVEL_FILE='$LEVEL_FILE' speak \"\$1\" \"\$2\"" _ "$need" "$line" >/dev/null 2>&1 &
 }
 
-if [ "${1:-}" = hook ]; then
-  hook "${2:-agent}"
-else
-  speak "${*:-$(cat)}"
-fi
+case ${1:-} in
+  hook)
+    hook "${2:-agent}"
+    ;;
+  level)
+    if [ -n "${2:-}" ]; then
+      mkdir -p "$(dirname "$LEVEL_FILE")"
+      printf '%s\n' "$2" > "$LEVEL_FILE"
+    fi
+    cat "$LEVEL_FILE" 2>/dev/null || echo updates
+    ;;
+  -l)
+    speak "$2" "${*:3}"
+    ;;
+  *)
+    speak narrate "${*:-$(cat)}"
+    ;;
+esac
