@@ -157,15 +157,12 @@ def collect():
             added = removed = 0
         else:
             rank, icon, colour = STATES.get(record.get("state", ""), STATES["idle"])
-            # Live name first, per agent: a stored title is a snapshot and
-            # goes stale the moment the session is renamed.
-            # A name someone chose beats one that was derived: your
-            # /rename, then the agent's own name, then codex's first-message
-            # title, then the opening prompt.
+            # The agent's own name is authoritative. A manual /rename is
+            # next, followed by codex's derived title and the opening prompt.
             agent_named = (record.get("title")
                            if record.get("title_by") == "agent" else "")
-            label = (named.get(record.get("owner", ""))
-                     or agent_named
+            label = (agent_named
+                     or named.get(record.get("owner", ""))
                      or (codex_title(record)
                          if record.get("agent") == "codex" else "")
                      or record.get("title") or name)

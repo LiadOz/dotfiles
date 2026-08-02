@@ -194,11 +194,21 @@ def cmd_hook(args):
     state = EVENTS[event]
 
     if event == "SessionStart":
-        # Fresh agent in this slot. Drop whatever the last occupant left --
-        # this is what makes ctrl-C and relaunch reset the window cleanly.
-        save({"state": "idle", "since": int(time.time()),
-              "agent": kind, "cwd": data.get("cwd", ""),
-              "thread": thread_id(data)})
+        # Codex can restart within the same thread (for example after a
+        # compaction). Keep the name and cwd that agent chose for that
+        # thread; only a genuinely new occupant resets the slot.
+        previous = load()
+        same_owner = previous.get("owner") == _hook_owner
+        record = {"state": "idle", "since": int(time.time()),
+                  "agent": kind, "cwd": data.get("cwd", ""),
+                  "thread": thread_id(data)}
+        if same_owner and previous.get("title_by") == "agent":
+            record.update({"title": previous.get("title", ""),
+                           "title_by": "agent"})
+        if same_owner and previous.get("cwd_by") == "agent":
+            record.update({"cwd": previous.get("cwd", ""),
+                           "cwd_by": "agent"})
+        save(record)
         return
 
     record = load()
@@ -208,12 +218,12 @@ def cmd_hook(args):
     if event == "PostToolUse" and record.get("state") != "blocked":
         return
 
-    # Title precedence: what you named the session, then what the agent
-    # called it, then the first line of your prompt as a last resort.
+    # Title precedence: what the agent called itself, then what you named
+    # the session, then the first line of your prompt as a last resort.
     extra = {}
     if event in ("UserPromptSubmit", "Stop"):
         named = session_name(data.get("session_id", ""))
-        if named:
+        if named and record.get("title_by") != "agent":
             extra = {"title": named, "title_by": "session"}
         elif event == "UserPromptSubmit" and record.get("title_by") != "agent":
             guess = title_from_prompt(data)
