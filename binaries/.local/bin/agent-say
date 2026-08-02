@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Say something out loud, so an agent can talk back to you.
+#
+#   agent-say "the build is done"
+#   echo "the build is done" | agent-say
+#   agent-say hook claude          # from a hook, with the payload on stdin
+#
+# Speech comes from Kokoro-FastAPI on localhost -- an OpenAI-compatible TTS
+# server keeping the model warm on the GPU (systemctl --user status kokoro-tts).
+# Synthesis is a third of a second; loading the model is six, which is why the
+# server stays up rather than starting per notification.
+set -u
+
+URL=${AGENT_SAY_URL:-http://127.0.0.1:8880/v1/audio/speech}
+VOICE=${AGENT_SAY_VOICE:-bf_emma}
+LOCK=${XDG_RUNTIME_DIR:-/tmp}/agent-say.lock
+
+speak() {
+  [ -n "${1// /}" ] || return 0
+  # Serialise: several agents finishing together should queue, not talk over
+  # each other. -w gives up rather than piling up a backlog of stale news.
+  flock -w 30 "$LOCK" curl -sS -m 60 "$URL" \
+    -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg i "$1" --arg v "$VOICE" \
+          '{model:"kokoro", input:$i, voice:$v, response_format:"pcm"}')" |
+    paplay --raw --format=s16le --rate=24000 --channels=1
+}
+
+# What this session is called, so you can tell agents apart by ear. agent-state
+# records it per tmux window keyed by the session that claimed the window.
+title() {
+  jq -r --arg o "$1" 'select(.owner == $o) | .title // empty' \
+    "$HOME/.local/state/agent-slots"/*.json 2>/dev/null | head -1
+}
+
+hook() {
+  local payload event owner name line
+  payload=$(cat)
+  event=$(jq -r '.hook_event_name // .type // empty' <<<"$payload")
+  owner=$(jq -r '.session_id // empty' <<<"$payload")
+  name=$(title "$owner")
+  name=${name:-$1}
+
+  case $event in
+    # Claude phrases its own notification; it is more specific than anything
+    # we could infer, so pass it through.
+    Notification)      line="$name. $(jq -r '.message // "needs you"' <<<"$payload")" ;;
+    PermissionRequest) line="$name is asking permission." ;;
+    Stop)              line="$name is done." ;;
+    *)                 return 0 ;;
+  esac
+  # Detached: a hook must not hold the agent up for the length of a sentence.
+  setsid bash -c "$(declare -f speak); URL='$URL' VOICE='$VOICE' LOCK='$LOCK' speak \"\$1\"" _ "$line" \
+    >/dev/null 2>&1 &
+}
+
+if [ "${1:-}" = hook ]; then
+  hook "${2:-agent}"
+else
+  speak "${*:-$(cat)}"
+fi

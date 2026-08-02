@@ -21,7 +21,7 @@ chmod u+x binaries/.local/bin/*
 # one with a symlink into this repo. That is what lets ~/.local/bin and
 # ~/.codex stay yours, holding machine-specific links alongside the ones
 # this repo provides, on every machine.
-for PKG in binaries gdb nvim tmux zsh colordiff task agents; do
+for PKG in binaries gdb nvim tmux zsh colordiff task agents systemd; do
   if stow --no-folding "$PKG" 2>/tmp/stow-$PKG.err; then
     echo "stow: $PKG"
   else
@@ -88,5 +88,36 @@ if command -v jq &>/dev/null; then
       "$CODEX_HOOKS" > "$CODEX_HOOKS.tmp" &&
       mv "$CODEX_HOOKS.tmp" "$CODEX_HOOKS"
   done
+fi
+
+# Spoken notifications: say out loud when an agent is blocked on you or has
+# finished, naming the session so you can tell several agents apart by ear.
+# Needs the kokoro-tts service above; agent-say is silent if it is not running.
+#
+# Only the two events worth interrupting you for. Adding UserPromptSubmit or
+# PostToolUse here would narrate every tool call.
+if command -v jq &>/dev/null; then
+  for EVENT in PermissionRequest Stop; do
+    for TARGET in "claude:$CLAUDE_SETTINGS" "codex:$CODEX_HOOKS"; do
+      KIND=${TARGET%%:*}
+      FILE=${TARGET#*:}
+      [ -f "$FILE" ] || continue
+      if jq --arg e "$EVENT" --arg c "agent-say hook $KIND" -e \
+        '[.hooks[$e][]?.hooks[]?.command] | any(. == $c)' "$FILE" &>/dev/null; then
+        continue
+      fi
+      jq --arg e "$EVENT" --arg c "agent-say hook $KIND" \
+        '.hooks[$e] = ((.hooks[$e] // []) + [{"hooks": [{"type": "command", "command": $c, "timeout": 5}]}])' \
+        "$FILE" > "$FILE.tmp" && mv "$FILE.tmp" "$FILE"
+    done
+  done
+fi
+
+# The TTS server is a systemd user unit, so it survives a reboot and restarts
+# itself. Enabling is a no-op once done.
+if [ -d "$HOME/.local/share/kokoro-fastapi" ]; then
+  systemctl --user daemon-reload
+  systemctl --user enable --now kokoro-tts.service &>/dev/null &&
+    echo "kokoro-tts: enabled"
 fi
 
