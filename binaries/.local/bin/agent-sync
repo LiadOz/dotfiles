@@ -3,13 +3,15 @@
 
 The agents run on an LSF exec host and cannot talk to this tmux server, so
 they write JSON to shared storage and this is the only thing that touches
-tmux. Sets four window options, which .tmux.agents.conf renders:
+tmux. Sets seven window options, which .tmux.agents.conf renders:
 
     @agent_state   working | blocked | done | idle
     @agent_title   agent-chosen title, shown in the picker
     @agent_kind    claude | codex
     @agent_cwd     the agent's real cwd
     @agent_branch  branch of that cwd, for status-left
+    @agent_added   lines added in the worktree
+    @agent_removed lines removed in the worktree
 
 and two globals for the fleet summary in status-right:
 
@@ -40,7 +42,8 @@ import time
 STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
 FOCUS_PATH = STATE_DIR / "focus"
 INTERVAL = float(os.environ.get("AGENT_SYNC_INTERVAL", "2"))
-BRANCH_TTL = 30  # a worktree's branch rarely changes; don't run git every cycle
+GIT_TTL = 30  # keep Git work out of the two-second state sync path
+BASES = ("origin/master", "origin/main", "master", "main")
 # Field separator for tmux -F output. Not a tab: the tmux build on tlv
 # replaces tabs in -F output with underscores, so every line parsed as a
 # single field, both scripts saw zero windows, and the whole thing was
@@ -49,9 +52,10 @@ BRANCH_TTL = 30  # a worktree's branch rarely changes; don't run git every cycle
 SEP = ":::"
 
 OPTIONS = ("@agent_state", "@agent_title", "@agent_kind", "@agent_cwd",
-           "@agent_branch")
+           "@agent_branch", "@agent_added", "@agent_removed")
 
 _branches = {}  # cwd -> (branch, when)
+_diffstats = {}  # cwd -> ((added, removed), when)
 
 
 def remove(path):
@@ -93,7 +97,7 @@ def branch(path):
     if not path or not os.path.isdir(path):
         return ""
     cached, when = _branches.get(path, ("", 0))
-    if time.time() - when < BRANCH_TTL:
+    if time.time() - when < GIT_TTL:
         return cached
     head = subprocess.run(
         ("git", "-C", path, "rev-parse", "--abbrev-ref", "HEAD"),
@@ -105,15 +109,53 @@ def branch(path):
     return name
 
 
+def diffstat(path):
+    """Tracked worktree changes since the branch split from its base."""
+    if not path or not os.path.isdir(path):
+        return 0, 0
+    cached, when = _diffstats.get(path, ((0, 0), 0))
+    if time.time() - when < GIT_TTL:
+        return cached
+    base = "HEAD"
+    for candidate in BASES:
+        found = subprocess.run(
+            ("git", "-C", path, "merge-base", "HEAD", candidate),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            universal_newlines=True, check=False,
+        )
+        if found.returncode == 0 and found.stdout.strip():
+            base = found.stdout.strip()
+            break
+    numstat = subprocess.run(
+        ("git", "-C", path, "diff", "--numstat", base),
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        universal_newlines=True, check=False,
+    )
+    added = removed = 0
+    if numstat.returncode == 0:
+        for line in numstat.stdout.splitlines():
+            cols = line.split("\t")
+            if len(cols) >= 2:
+                added += int(cols[0]) if cols[0].isdigit() else 0
+                removed += int(cols[1]) if cols[1].isdigit() else 0
+    result = added, removed
+    _diffstats[path] = (result, time.time())
+    return result
+
+
 def apply(window, record):
+    cwd = record.get("cwd", "")
+    added, removed = diffstat(cwd)
     for option, value in (
         # Normalise: a state file written before "idle" existed, or one
         # truncated mid-write, must not read as "not an agent window".
         ("@agent_state", record.get("state") or "idle"),
         ("@agent_title", record.get("title", "")),
         ("@agent_kind", record.get("agent", "")),
-        ("@agent_cwd", record.get("cwd", "")),
-        ("@agent_branch", branch(record.get("cwd", ""))),
+        ("@agent_cwd", cwd),
+        ("@agent_branch", branch(cwd)),
+        ("@agent_added", str(added)),
+        ("@agent_removed", str(removed)),
     ):
         tmux("set-option", "-w", "-t", window, option, value)
     # An agent prints continuously, so the activity flag is on permanently

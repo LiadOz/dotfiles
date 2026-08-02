@@ -90,8 +90,11 @@ def slot_from_owner(value):
 
 
 def slot():
+    agent_owner = (os.environ.get("CODEX_THREAD_ID")
+                   or os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
     value = (os.environ.get("AGENT_SLOT") or slot_from_tmux()
              or (_hook_owner and slot_from_owner(_hook_owner))
+             or slot_from_owner(agent_owner)
              or slot_from_focus())
     if not value:
         sys.exit(0)
@@ -198,9 +201,11 @@ def cmd_hook(args):
               "thread": thread_id(data)})
         return
 
+    record = load()
+
     # PostToolUse fires on every tool call, so keep it cheap: it exists only
     # to clear `blocked` once you have answered, and is a no-op otherwise.
-    if event == "PostToolUse" and load().get("state") != "blocked":
+    if event == "PostToolUse" and record.get("state") != "blocked":
         return
 
     # Title precedence: what you named the session, then what the agent
@@ -210,11 +215,13 @@ def cmd_hook(args):
         named = session_name(data.get("session_id", ""))
         if named:
             extra = {"title": named, "title_by": "session"}
-        elif event == "UserPromptSubmit" and load().get("title_by") != "agent":
+        elif event == "UserPromptSubmit" and record.get("title_by") != "agent":
             guess = title_from_prompt(data)
             if guess:
                 extra = {"title": guess, "title_by": "prompt"}
-    set_state(state, agent=kind, cwd=data.get("cwd", ""),
+    cwd = (record.get("cwd", "") if record.get("cwd_by") == "agent"
+           else data.get("cwd", ""))
+    set_state(state, agent=kind, cwd=cwd,
               thread=thread_id(data), **extra)
 
 
@@ -277,6 +284,8 @@ def cmd_title(args):
     record = load()
     record["title"] = " ".join(args).strip()
     record["title_by"] = "agent"
+    record["cwd"] = os.getcwd()
+    record["cwd_by"] = "agent"
     record.setdefault("state", "idle")
     record.setdefault("since", int(time.time()))
     save(record)
