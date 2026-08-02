@@ -29,15 +29,18 @@ SESSION=${CLAUDE_CODE_SESSION_ID:-$$}
 
 level() { cat "$LEVEL_FILE" 2>/dev/null || echo updates; }
 
-# $1 minimum level this is worth hearing at, $2 what to say. Named after the
-# host so you can tell where an agent is speaking from once this is running
-# on the farm as well.
-spool() {
+# Carries who is speaking as well as what: the daemon reads the name out and
+# gives each session its own voice, so several agents stay tellable apart.
+# The host is for once this is running on the farm too.
+spool() {  # $1 level, $2 text, $3 session, $4 name
   [ -n "${2// /}" ] || return 0
   mkdir -p "$STATE/spool"
-  jq -nc --arg l "$1" --arg t "$2" --arg h "$(hostname -s)" \
-    '{level: $l, text: $t, host: $h}' \
-    > "$STATE/spool/$(date +%s%N).$$.json"
+  local note=$STATE/spool/$(date +%s%N).$$
+  jq -nc --arg l "$1" --arg t "$2" --arg s "$3" --arg n "$4" --arg h "$(hostname -s)" \
+    '{level: $l, text: $t, session: $s, name: $n, host: $h}' > "$note.part"
+  # Only .json is picked up, so a note becomes visible whole or not at all --
+  # to the daemon here, and to the rsync that collects it from the farm.
+  mv "$note.part" "$note.json"
 }
 
 # What this session is called, so you can tell agents apart by ear.
@@ -73,22 +76,22 @@ hook() {
   case $event in
     # Claude phrases its own notification; it is more specific than anything
     # we could infer, so pass it through.
-    Notification)      need=alerts;  line="$name. $(jq -r '.message // "needs you"' <<<"$payload")" ;;
-    PermissionRequest) need=alerts;  line="$name is asking permission." ;;
+    Notification)      need=alerts;  line=$(jq -r '.message // "needs you"' <<<"$payload") ;;
+    PermissionRequest) need=alerts;  line="is asking permission." ;;
     Stop)
       need=updates
-      line="$name is done."
+      line="is done."
       # Away from the screen, what you want is the answer, not the fact that
       # there is one -- unless this session has been narrating, in which case
       # it has already told you and reading its closing message back is just
       # saying everything twice.
       [ "$(level)" = narrate ] &&
         [ -z "$(find "$STATE/narrated/$session" -newermt '-3 minutes' 2>/dev/null)" ] &&
-        line="$name says. $(answer "$payload")"
+        line="says. $(answer "$payload")"
       ;;
     *) return 0 ;;
   esac
-  spool "$need" "$line"
+  spool "$need" "$line" "$session" "$name"
 }
 
 case ${1:-} in
@@ -103,11 +106,11 @@ case ${1:-} in
     level
     ;;
   -l)
-    spool "$2" "${*:3}"
+    spool "$2" "${*:3}" "$SESSION" "$(title "$SESSION")"
     ;;
   *)
     mkdir -p "$STATE/narrated"
     touch "$STATE/narrated/$SESSION"
-    spool narrate "${*:-$(cat)}"
+    spool narrate "${*:-$(cat)}" "$SESSION" "$(title "$SESSION")"
     ;;
 esac

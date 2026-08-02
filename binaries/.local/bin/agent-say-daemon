@@ -8,7 +8,17 @@
 set -u
 
 URL=${AGENT_SAY_URL:-http://127.0.0.1:8880/v1/audio/speech}
-VOICE=${AGENT_SAY_VOICE:-bf_emma}
+
+# One voice per agent, so you know who is talking before they say their name.
+# Chosen to be told apart easily: alternating accent and register rather than
+# eight pleasant voices that all sound alike.
+VOICES=(bf_emma bm_george af_heart am_michael bf_isabella am_fenrir af_nova bm_lewis)
+
+voice_for() {  # $1 session -> a voice that will not change under it
+  local sum
+  sum=$(cksum <<<"$1" | cut -d' ' -f1)
+  echo "${VOICES[sum % ${#VOICES[@]}]}"
+}
 STATE=${XDG_STATE_HOME:-$HOME/.local/state}/agent-say
 SPOOL=$STATE/spool
 LEVEL_FILE=${XDG_CONFIG_HOME:-$HOME/.config}/agent-say/level
@@ -32,9 +42,9 @@ wait_for_mic() {
   return 1  # you have been talking for a minute and a half; it can wait
 }
 
-synth() {  # $1 text -> raw audio in file $2
+synth() {  # $1 text, $2 file, $3 voice
   curl -sS -m 120 "$URL" -H 'Content-Type: application/json' \
-    -d "$(jq -nc --arg i "$1" --arg v "$VOICE" \
+    -d "$(jq -nc --arg i "$1" --arg v "$3" \
           '{model:"kokoro", input:$i, voice:$v, response_format:"pcm"}')" > "$2"
 }
 
@@ -65,13 +75,13 @@ RESUMES=(
 
 # A sentence at a time, so that being interrupted has a place to resume from:
 # whichever sentence you cut off, said again from its start.
-say() {
+say() {  # $1 text, $2 voice
   local -a parts
   mapfile -t parts < <(sed 's/\([.!?]\)  */\1\n/g' <<<"$1")
   local cut_at i=0
   while [ "$i" -lt "${#parts[@]}" ]; do
     wait_for_mic || return 0
-    synth "${parts[i]}" "$WAV"
+    synth "${parts[i]}" "$WAV" "$2"
     if play "$WAV"; then
       i=$((i + 1))
       continue
@@ -81,14 +91,37 @@ say() {
     cut_at=$SECONDS
     wait_for_mic || return 0
     [ $((SECONDS - cut_at)) -lt 20 ] || return 0
-    synth "${RESUMES[RANDOM % ${#RESUMES[@]}]}" "$WAV"
+    synth "${RESUMES[RANDOM % ${#RESUMES[@]}]}" "$WAV" "$2"
     play "$WAV"
+  done
+}
+
+# Agents on the farm cannot reach these speakers, so they spool where they
+# are and we collect it. Pulling rather than pushing because nothing out
+# there can open a connection back to this laptop. --remove-source-files so
+# a note is read out once; a shared ssh connection so polling stays cheap.
+HOSTS=${AGENT_SAY_HOSTS:-tlv}
+# The tlv alias forces a login shell and a tty, neither of which rsync can
+# use. One shared connection, so polling every couple of seconds is cheap.
+FETCH_SSH="ssh -o ControlMaster=auto -o ControlPath=~/.ssh/cm-%r@%h:%p \
+-o ControlPersist=10m -o ConnectTimeout=10 -o BatchMode=yes \
+-o RemoteCommand=none -o RequestTTY=no"
+
+fetch() {
+  local host
+  while :; do
+    for host in $HOSTS; do
+      rsync -rq --remove-source-files --timeout=10 --include='*.json' --exclude='*' \
+        -e "$FETCH_SSH" "$host:.local/state/agent-say/spool/" "$SPOOL/" 2>/dev/null
+    done
+    sleep 2
   done
 }
 
 WAV=$(mktemp)
 trap 'rm -f "$WAV"' EXIT
 mkdir -p "$SPOOL"
+[ -n "$HOSTS" ] && fetch &
 
 while :; do
   # Oldest first: the filenames are nanosecond timestamps.
@@ -99,6 +132,8 @@ while :; do
   fi
   text=$(jq -r '.text' "$SPOOL/$note" 2>/dev/null)
   need=$(jq -r '.level' "$SPOOL/$note" 2>/dev/null)
+  name=$(jq -r '.name // empty' "$SPOOL/$note" 2>/dev/null)
+  session=$(jq -r '.session // empty' "$SPOOL/$note" 2>/dev/null)
   rm -f "$SPOOL/$note"
 
   # Judge the level now rather than when it was written: turning the volume
@@ -109,5 +144,7 @@ while :; do
   # could not reach us, are stale on arrival. Better quiet than yesterday's
   # news. The filename is when it was written, which survives being copied.
   [ "${note%%.*}" -gt $(( ($(date +%s) - 300) * 1000000000 )) ] || continue
-  say "$text"
+  # Say who it is. The voice tells you at once; the name tells you which
+  # piece of work, which the voice cannot.
+  say "${name:+$name. }$text" "$(voice_for "$session")"
 done
