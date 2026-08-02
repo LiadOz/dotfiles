@@ -118,6 +118,23 @@ def thread_id(data):
     return ""
 
 
+def tool_workdir(data):
+    """Explicit working directory from a shell tool call, if present."""
+    value = data.get("tool_input")
+    if isinstance(value, str):
+        start = value.find("{")
+        try:
+            value = json.JSONDecoder().raw_decode(value[start:])[0]
+        except (ValueError, TypeError):
+            return ""
+    if not isinstance(value, dict):
+        return ""
+    workdir = value.get("workdir") or value.get("cwd")
+    if isinstance(workdir, str) and os.path.isdir(workdir):
+        return workdir
+    return ""
+
+
 def cmd_hook(args):
     kind = next((a for a in args if a in ("claude", "codex")), "")
     data = payload(args)
@@ -135,22 +152,27 @@ def cmd_hook(args):
     record = load(value)
     if ending:
         set_state(value, record, "free", agent=kind,
-                  cwd=data.get("cwd", ""), thread=thread_id(data))
+                  cwd=record.get("cwd", "") or data.get("cwd", ""),
+                  thread=thread_id(data))
         return
 
     state = EVENTS[event]
 
     if event == "SessionStart":
         record.setdefault("started", int(time.time() * 1000))
-        cwd = (record.get("cwd", "") if record.get("cwd_by") == "agent"
-               else data.get("cwd", ""))
+        cwd = record.get("cwd", "") or data.get("cwd", "")
         set_state(value, record, "idle", agent=kind, cwd=cwd,
                   thread=thread_id(data))
         return
 
-    # PostToolUse fires on every tool call, so keep it cheap: it exists only
-    # to clear `blocked` once you have answered, and is a no-op otherwise.
+    # Most PostToolUse events only refresh the directory; avoid rewriting the
+    # record when neither the state nor cwd changed.
     if event == "PostToolUse" and record.get("state") != "blocked":
+        workdir = tool_workdir(data)
+        if workdir and workdir != record.get("cwd"):
+            record["cwd"] = workdir
+            record.pop("cwd_by", None)
+            save(value, record)
         return
 
     # Title precedence: what the agent called itself, then what you named
@@ -164,8 +186,7 @@ def cmd_hook(args):
             guess = title_from_prompt(data)
             if guess:
                 extra = {"title": guess, "title_by": "prompt"}
-    cwd = (record.get("cwd", "") if record.get("cwd_by") == "agent"
-           else data.get("cwd", ""))
+    cwd = tool_workdir(data) or record.get("cwd", "") or data.get("cwd", "")
     set_state(value, record, state, agent=kind, cwd=cwd,
               thread=thread_id(data), **extra)
 
@@ -231,7 +252,7 @@ def cmd_title(args):
     record["title"] = " ".join(args).strip()
     record["title_by"] = "agent"
     record["cwd"] = os.getcwd()
-    record["cwd_by"] = "agent"
+    record.pop("cwd_by", None)
     record.setdefault("state", "idle")
     record.setdefault("since", int(time.time()))
     record.setdefault("started", int(time.time() * 1000))
