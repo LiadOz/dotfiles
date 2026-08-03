@@ -49,3 +49,10 @@ exception, not something to revisit each turn.
 Then tell me, in one short line, what you named it. I may rename the session
 itself to match, so the two stay consistent. Do not rename the session
 yourself.
+
+## Installing dotfiles changes
+
+Treat `~/dotfiles` as the deployed checkout. Never switch or reset it to one
+feature branch: another agent's installed commits may be there already. Work
+in a separate worktree, integrate both histories, then fast-forward
+`~/dotfiles` so installing one change cannot silently remove another.
