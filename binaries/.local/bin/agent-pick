@@ -9,6 +9,7 @@ group is the work that has been waiting longest.
 """
 import glob
 import json
+import re
 import sqlite3
 import pathlib
 import subprocess
@@ -34,6 +35,7 @@ RESET = "\033[0m"
 DIM = "\033[90m"
 GREEN = "\033[32m"
 RED = "\033[31m"
+ANSI = re.compile(r"\033\[[0-9;]*m")
 
 # claude writes one of these per running session, holding the name from
 # /rename and the session id also stored by agent-state.
@@ -134,7 +136,7 @@ def tmux_windows():
 def collect():
     rows = []
     named = session_names()
-    for slot, (_session, index, name, active, command, head,
+    for slot, (session, index, name, active, command, head,
                added, removed, state, title, title_by, kind, owner,
                thread, since) in tmux_windows().items():
         record = ({"state": state, "title": title, "title_by": title_by,
@@ -162,7 +164,7 @@ def collect():
             added = int(added or 0)
             removed = int(removed or 0)
         rows.append({
-            "slot": slot, "index": index, "label": label,
+            "slot": slot, "session": session, "index": index, "label": label,
             "branch": head, "added": added, "removed": removed,
             "active": active == "1", "rank": rank,
             "icon": icon, "colour": colour,
@@ -177,14 +179,17 @@ def collect():
 
 def render(rows):
     width = min(max((len(r["label"]) for r in rows), default=20), 44)
+    multiple_sessions = len({r["session"] for r in rows}) > 1
     lines = []
     for row in rows:
         label = row["label"][:width].ljust(width)
         here = ">" if row["active"] else " "
+        location = (f"{row['session']}:{row['index']}" if multiple_sessions
+                    else row["index"])
         lines.append(
             f"{row['slot']}{SEP}{row['colour']}{row['icon']}{RESET}"
             f"{here} {row['colour']}{label}{RESET}  "
-            f"{DIM}{row['index']}  {row['branch']}{RESET}"
+            f"{DIM}{location}  {row['branch']}{RESET}"
             + (f"  {GREEN}+{row['added']}{RESET} {RED}-{row['removed']}{RESET}"
                if row["added"] or row["removed"] else "")
         )
@@ -201,23 +206,30 @@ def main():
     # stdout only, never capture_output: fzf draws its interface on stderr,
     # so capturing that sends the whole UI into a pipe and the popup shows
     # nothing at all.
+    lines = render(rows)
     fzf = subprocess.run(
         ("fzf", "--ansi", "--reverse", "--delimiter=" + SEP, "--with-nth=2..",
          "--no-sort", "--info=inline", "--prompt=window > ",
          "--header=BLOCK needs you   DONE unseen   WORK running   FREE reusable   (ctrl-/ hides preview)",
          "--preview", PREVIEW, "--preview-window", "right:55%:wrap",
          "--bind", "ctrl-/:toggle-preview"),
-        input="\n".join(render(rows)), stdout=subprocess.PIPE, universal_newlines=True,
+        input="\n".join(lines), stdout=subprocess.PIPE, universal_newlines=True,
         check=False,
     )
     if fzf.returncode != 0 or not fzf.stdout.strip():
         return
 
-    slot = fzf.stdout.split(SEP, 1)[0].strip()
-    session = tmux("display-message", "-p", "-t", slot, "#{session_name}")
-    if session.stdout.strip():
-        tmux("switch-client", "-t", session.stdout.strip())
+    selected = fzf.stdout.rstrip()
+    slot = next((line.split(SEP, 1)[0] for line in lines
+                 if ANSI.sub("", line.split(SEP, 1)[1]).rstrip() == selected), "")
+    if not slot:
+        return
+    session = tmux("display-message", "-p", "-t", slot,
+                   "#{session_name}").stdout.strip()
+    current = tmux("display-message", "-p", "#{session_name}").stdout.strip()
     tmux("select-window", "-t", slot)
+    if session and session != current:
+        tmux("switch-client", "-t", session)
 
 
 if __name__ == "__main__":

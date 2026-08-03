@@ -286,10 +286,6 @@ def sync_once():
         if record.get("state") == "done" and active:
             write_state(path, record, "idle")
             record["state"] = "idle"
-        elif record.get("state") == "free" and not at_shell:
-            # A reused agent pane is occupied before its new agent hook runs.
-            write_state(path, record, "idle")
-            record["state"] = "idle"
         elif record.get("state") != "free" and at_shell:
             write_state(path, record, "free")
             record["state"] = "free"
