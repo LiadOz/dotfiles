@@ -46,6 +46,7 @@ import time
 STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
 SESSION_DIR = STATE_DIR / "sessions"
 WINDOW_PATH = STATE_DIR / "windows"
+FOCUS_PATH = STATE_DIR / "focus.json"
 INTERVAL = float(os.environ.get("AGENT_SYNC_INTERVAL", "2"))
 GIT_TTL = 30  # keep Git work out of the two-second state sync path
 BASES = ("origin/master", "origin/main", "master", "main")
@@ -206,6 +207,13 @@ def write_state(path, record, state):
     tmp.replace(path)
 
 
+def write_focus(server, pane):
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = FOCUS_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"server": server, "pane": pane}))
+    tmp.replace(FOCUS_PATH)
+
+
 def migrate_legacy(server, panes):
     """Turn the last window records into stable session records once."""
     by_window = {}
@@ -331,10 +339,8 @@ def single_instance(server):
 
 
 def main():
-    # Let a retained old hook load the config that removes it. This makes an
-    # existing tmux server upgrade itself on the next window switch.
-    if len(sys.argv) == 3 and sys.argv[1] == "focus":
-        tmux("source-file", str(pathlib.Path.home() / ".tmux.agents.conf"))
+    if len(sys.argv) == 4 and sys.argv[1] == "focus":
+        write_focus(sys.argv[2], sys.argv[3])
         return
     if len(sys.argv) == 3 and sys.argv[1] == "migrate":
         try:
@@ -354,7 +360,7 @@ def main():
                 remove(path)
         return
     if len(sys.argv) != 3 or sys.argv[1] != "daemon":
-        sys.exit("usage: agent-sync daemon|migrate <server> | "
+        sys.exit("usage: agent-sync daemon|focus|migrate <server> | "
                  "clear <server> <pane>")
     server = sys.argv[2]
     STATE_DIR.mkdir(parents=True, exist_ok=True)
