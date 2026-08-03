@@ -1,27 +1,19 @@
 #!/usr/bin/env python3
-"""Record what a coding agent is doing, for the tmux status bar.
+"""Record one coding-agent session for the tmux status bar.
 
-Runs wherever the agent runs -- on the LSF exec host, not on tlv. The agent
-cannot reach tlv's tmux server, so it drops a small JSON file on shared
-storage and agent-sync (on tlv) picks it up.
-
-A "slot" is one tmux window, identified by its tmux window id (@7). Local
-agents derive it from tmux; remote agents read the window most recently
-focused on the tmux host from shared storage.
-
-Called from claude/codex hooks, and by the agent itself for `title`.
+The agent may run on LSF and cannot contact the tmux server. It does not need
+to: tmux exports its server and pane ids into the process environment. This
+script stores those ids with the session; agent-sync performs the only
+pane-to-window mapping on the tmux host.
 """
 import json
 import os
 import pathlib
-import subprocess
 import sys
 import time
 
-# Shared by the tmux host and the LSF exec host.
 STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
-FOCUS_PATH = STATE_DIR / "focus"
-_hook_owner = ""  # set once by cmd_hook; each invocation runs one command
+SESSION_DIR = STATE_DIR / "sessions"
 
 # claude keeps one small file per running session here, keyed by pid, with
 # the name you gave it via /rename. That name beats anything we could infer.
@@ -38,96 +30,54 @@ EVENTS = {
 }
 
 
-def remove(path):
-    """Path.unlink(missing_ok=True) is 3.8+; tlv runs python 3.6."""
+def remove(target):
     try:
-        path.unlink()
+        target.unlink()
     except FileNotFoundError:
         pass
 
-def slot_from_tmux():
-    """Derive the window when the agent runs on the same machine as tmux.
-
-    Only the LSF case genuinely needs $AGENT_SLOT passed in; running an agent
-    in a local tmux window should not need any setup. On an exec host
-    $TMUX_PANE is absent, so this costs nothing there.
-    """
-    pane = os.environ.get("TMUX_PANE")
-    if not pane:
-        return ""
-    found = subprocess.run(
-        ("tmux", "display-message", "-p", "-t", pane, "#{window_id}"),
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        universal_newlines=True, check=False,
-    )
-    return found.stdout.strip() if found.returncode == 0 else ""
+def environment_owner():
+    return (os.environ.get("CODEX_THREAD_ID")
+            or os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
 
 
-def slot_from_focus():
-    """The window most recently focused on the tmux host."""
-    try:
-        return FOCUS_PATH.read_text().strip()
-    except OSError:
-        return ""
-
-
-def owner(data):
-    """Stable identity shared by every hook from one agent session."""
-    return (data.get("session_id")
+def session_owner(data):
+    return (data.get("session_id") or environment_owner()
             or f"{os.uname().nodename}:{os.getppid()}")
 
 
-def slot_from_owner(value):
-    """The window this agent session claimed on its first hook."""
-    for state_path in STATE_DIR.glob("*.json"):
-        try:
-            record = json.loads(state_path.read_text())
-        except (OSError, ValueError):
-            continue
-        if record.get("owner") == value:
-            return state_path.stem
-    return ""
+def session_path(value):
+    return SESSION_DIR / f"{value.replace('/', '_')}.json"
 
 
-def slot():
-    value = (os.environ.get("AGENT_SLOT") or slot_from_tmux()
-             or (_hook_owner and slot_from_owner(_hook_owner))
-             or slot_from_focus())
-    if not value:
-        sys.exit(0)
-    return value.replace("/", "_")
-
-
-def path():
-    return STATE_DIR / f"{slot()}.json"
-
-
-def load():
+def load(value):
     try:
-        return json.loads(path().read_text())
+        return json.loads(session_path(value).read_text())
     except (OSError, ValueError):
         return {}
 
 
-def save(record):
-    record["slot"] = slot()
-    if _hook_owner:
-        record["owner"] = _hook_owner
-    else:
-        record.setdefault("owner", owner({}))
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = path().with_suffix(".tmp")
+def save(value, record):
+    record["owner"] = value
+    tmux = os.environ.get("TMUX", "").rsplit(",", 2)
+    pane = os.environ.get("TMUX_PANE", "")
+    if len(tmux) == 3 and pane:
+        record.setdefault("server", tmux[1])
+        record.setdefault("pane", pane)
+    record["updated"] = int(time.time() * 1000)
+    SESSION_DIR.mkdir(parents=True, exist_ok=True)
+    target = session_path(value)
+    tmp = target.with_suffix(".tmp")
     tmp.write_text(json.dumps(record))
-    tmp.replace(path())  # atomic: agent-sync never reads a half-written file
+    tmp.replace(target)
 
 
-def set_state(state, **fields):
-    record = load()
+def set_state(value, record, state, **fields):
     if record.get("state") != state:
         record["since"] = int(time.time())
     record["state"] = state
     record.update({k: v for k, v in fields.items() if v})
-    save(record)
+    save(value, record)
 
 
 def payload(args):
@@ -168,53 +118,94 @@ def thread_id(data):
     return ""
 
 
+def input_workdir(value):
+    if isinstance(value, str):
+        start = value.find("{")
+        try:
+            value = json.JSONDecoder().raw_decode(value[start:])[0]
+        except (ValueError, TypeError):
+            return ""
+    if not isinstance(value, dict):
+        return ""
+    workdir = value.get("workdir") or value.get("cwd")
+    if isinstance(workdir, str) and os.path.isdir(workdir):
+        return workdir
+    return ""
+
+
+def transcript_workdir(data):
+    """Last explicit tool workdir when Codex omits PostToolUse."""
+    path = data.get("transcript_path")
+    if not isinstance(path, str) or not os.path.isfile(path):
+        return ""
+    workdir = ""
+    try:
+        for line in pathlib.Path(path).open():
+            row = json.loads(line)
+            candidate = input_workdir(row.get("payload", {}).get("input"))
+            if candidate:
+                workdir = candidate
+    except (OSError, ValueError):
+        return workdir
+    return workdir
+
+
 def cmd_hook(args):
-    global _hook_owner
-    # Which agent this is has to be told to us: no hook payload identifies
-    # it, so each tool's config hardcodes it -- `agent-state hook claude`.
     kind = next((a for a in args if a in ("claude", "codex")), "")
     data = payload(args)
-    _hook_owner = owner(data)
+    value = session_owner(data)
     event = data.get("hook_event_name") or data.get("type", "")
-
-    if event in ("SessionEnd", "agent-turn-end"):
-        remove(path())
-        return
 
     # codex's older notify path only ever reports turn completion
     if event == "agent-turn-complete":
         event = "Stop"
 
-    if event not in EVENTS:
+    ending = event in ("SessionEnd", "agent-turn-end")
+    if event not in EVENTS and not ending:
+        return
+
+    record = load(value)
+    if ending:
+        set_state(value, record, "free", agent=kind,
+                  cwd=record.get("cwd", "") or data.get("cwd", ""),
+                  thread=thread_id(data))
         return
 
     state = EVENTS[event]
 
     if event == "SessionStart":
-        # Fresh agent in this slot. Drop whatever the last occupant left --
-        # this is what makes ctrl-C and relaunch reset the window cleanly.
-        save({"state": "idle", "since": int(time.time()),
-              "agent": kind, "cwd": data.get("cwd", ""),
-              "thread": thread_id(data)})
+        record.setdefault("started", int(time.time() * 1000))
+        cwd = record.get("cwd", "") or data.get("cwd", "")
+        set_state(value, record, "idle", agent=kind, cwd=cwd,
+                  thread=thread_id(data))
         return
 
-    # PostToolUse fires on every tool call, so keep it cheap: it exists only
-    # to clear `blocked` once you have answered, and is a no-op otherwise.
-    if event == "PostToolUse" and load().get("state") != "blocked":
+    # Most PostToolUse events only refresh the directory; avoid rewriting the
+    # record when neither the state nor cwd changed.
+    if event == "PostToolUse" and record.get("state") != "blocked":
+        workdir = input_workdir(data.get("tool_input"))
+        if workdir and workdir != record.get("cwd"):
+            record["cwd"] = workdir
+            record.pop("cwd_by", None)
+            save(value, record)
         return
 
-    # Title precedence: what you named the session, then what the agent
-    # called it, then the first line of your prompt as a last resort.
+    # Title precedence: what the agent called itself, then what you named
+    # the session, then the first line of your prompt as a last resort.
     extra = {}
     if event in ("UserPromptSubmit", "Stop"):
         named = session_name(data.get("session_id", ""))
-        if named:
+        if named and record.get("title_by") != "agent":
             extra = {"title": named, "title_by": "session"}
-        elif event == "UserPromptSubmit" and load().get("title_by") != "agent":
+        elif event == "UserPromptSubmit" and record.get("title_by") != "agent":
             guess = title_from_prompt(data)
             if guess:
                 extra = {"title": guess, "title_by": "prompt"}
-    set_state(state, agent=kind, cwd=data.get("cwd", ""),
+    workdir = input_workdir(data.get("tool_input"))
+    if not workdir and event == "Stop":
+        workdir = transcript_workdir(data)
+    cwd = workdir or record.get("cwd", "") or data.get("cwd", "")
+    set_state(value, record, state, agent=kind, cwd=cwd,
               thread=thread_id(data), **extra)
 
 
@@ -274,26 +265,32 @@ def title_from_prompt(data):
 def cmd_title(args):
     if not args:
         sys.exit("usage: agent-state title <text>")
-    record = load()
+    value = session_owner({})
+    record = load(value)
     record["title"] = " ".join(args).strip()
     record["title_by"] = "agent"
+    record["cwd"] = os.getcwd()
+    record.pop("cwd_by", None)
     record.setdefault("state", "idle")
     record.setdefault("since", int(time.time()))
-    save(record)
+    record.setdefault("started", int(time.time() * 1000))
+    save(value, record)
 
 
 def cmd_agent(args):
     if not args:
         sys.exit("usage: agent-state agent <claude|codex>")
-    record = load()
+    value = session_owner({})
+    record = load(value)
     record["agent"] = args[0]
     record.setdefault("state", "idle")
     record.setdefault("since", int(time.time()))
-    save(record)
+    record.setdefault("started", int(time.time() * 1000))
+    save(value, record)
 
 
 def cmd_clear(_args):
-    remove(path())
+    remove(session_path(session_owner({})))
 
 
 COMMANDS = {"hook": cmd_hook, "title": cmd_title, "name": cmd_title,

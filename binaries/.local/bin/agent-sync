@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """Mirror agent state files into tmux window options. Runs on tlv.
 
-The agents run on an LSF exec host and cannot talk to this tmux server, so
-they write JSON to shared storage and this is the only thing that touches
-tmux. Sets four window options, which .tmux.agents.conf renders:
+The agents run on an LSF exec host and cannot talk to this tmux server. Each
+writes a session record containing the tmux server and pane ids inherited at
+launch. This daemon maps those identities to current windows and is the only
+thing that sets their tmux options.
 
     @agent_state   working | blocked | done | idle
     @agent_title   agent-chosen title, shown in the picker
+    @agent_title_by agent | session | prompt
     @agent_kind    claude | codex
     @agent_cwd     the agent's real cwd
+    @agent_owner   stable Claude/Codex session id
+    @agent_thread  Codex thread id, for live renamed titles
+    @agent_since   timestamp of the last state change
     @agent_branch  branch of that cwd, for status-left
+    @agent_added   lines added in the worktree
+    @agent_removed lines removed in the worktree
 
 and two globals for the fleet summary in status-right:
 
@@ -36,11 +43,12 @@ import subprocess
 import sys
 import time
 
-# Shared by the tmux host and the LSF exec host.
 STATE_DIR = pathlib.Path.home() / ".local/state/agent-slots"
-FOCUS_PATH = STATE_DIR / "focus"
+SESSION_DIR = STATE_DIR / "sessions"
+WINDOW_PATH = STATE_DIR / "windows"
 INTERVAL = float(os.environ.get("AGENT_SYNC_INTERVAL", "2"))
-BRANCH_TTL = 30  # a worktree's branch rarely changes; don't run git every cycle
+GIT_TTL = 30  # keep Git work out of the two-second state sync path
+BASES = ("origin/master", "origin/main", "master", "main")
 # Field separator for tmux -F output. Not a tab: the tmux build on tlv
 # replaces tabs in -F output with underscores, so every line parsed as a
 # single field, both scripts saw zero windows, and the whole thing was
@@ -48,10 +56,13 @@ BRANCH_TTL = 30  # a worktree's branch rarely changes; don't run git every cycle
 # will not occur in a window name, a title taken from a prompt, or a branch.
 SEP = ":::"
 
-OPTIONS = ("@agent_state", "@agent_title", "@agent_kind", "@agent_cwd",
-           "@agent_branch")
+OPTIONS = ("@agent_state", "@agent_title", "@agent_title_by", "@agent_kind",
+           "@agent_cwd", "@agent_owner", "@agent_thread", "@agent_since",
+           "@agent_branch", "@agent_added", "@agent_removed")
+SHELLS = ("bash", "fish", "ksh", "sh", "tcsh", "zsh")
 
 _branches = {}  # cwd -> (branch, when)
+_diffstats = {}  # cwd -> ((added, removed), when)
 
 
 def remove(path):
@@ -62,38 +73,62 @@ def remove(path):
         pass
 
 
-def write_focus(window):
-    """Publish the focused tmux window for agents on remote hosts."""
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = FOCUS_PATH.with_suffix(".tmp")
-    tmp.write_text(window)
-    tmp.replace(FOCUS_PATH)
-
 def tmux(*args):
     return subprocess.run(("tmux",) + args, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE, universal_newlines=True,
                           check=False)
 
 
+def write_changed(path, text):
+    try:
+        if path.read_text() == text:
+            return
+    except OSError:
+        pass
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(text)
+    tmp.replace(path)
+
+
 def windows():
-    """window_id -> is it the active window of its session"""
-    result = tmux("list-windows", "-a", "-F",
-                  SEP.join(("#{window_id}", "#{window_active}")))
+    """Return live windows and ones carrying agent options."""
+    result = tmux("list-panes", "-a", "-F",
+                  SEP.join(("#{window_id}", "#{window_active}",
+                            "#{@agent_state}", "#{pane_current_command}",
+                            "#{session_name}", "#{window_index}",
+                            "#{window_name}", "#{@agent_title}",
+                            "#{pid}", "#{pane_id}")))
     if result.returncode != 0:
         return None
-    found = {}
+    live = {}
+    decorated = set()
+    links = []
+    panes = {}
+    server = ""
     for line in result.stdout.splitlines():
         parts = line.split(SEP)
-        if len(parts) == 2:
-            found[parts[0]] = parts[1] == "1"
-    return found
+        if len(parts) == 10:
+            active, commands = live.get(parts[0], (False, []))
+            commands.append(parts[3])
+            live[parts[0]] = (active or parts[1] == "1", commands)
+            if parts[2]:
+                decorated.add(parts[0])
+            links.append({"id": parts[0], "session": parts[4],
+                          "index": parts[5], "name": parts[6],
+                          "command": parts[3], "state": parts[2],
+                          "title": parts[7], "pane": parts[9]})
+            server = parts[8]
+            panes[parts[9]] = parts[0]
+
+    write_changed(WINDOW_PATH, json.dumps(links, sort_keys=True))
+    return live, decorated, server, panes
 
 
 def branch(path):
     if not path or not os.path.isdir(path):
         return ""
     cached, when = _branches.get(path, ("", 0))
-    if time.time() - when < BRANCH_TTL:
+    if time.time() - when < GIT_TTL:
         return cached
     head = subprocess.run(
         ("git", "-C", path, "rev-parse", "--abbrev-ref", "HEAD"),
@@ -105,15 +140,57 @@ def branch(path):
     return name
 
 
+def diffstat(path):
+    """Tracked worktree changes since the branch split from its base."""
+    if not path or not os.path.isdir(path):
+        return 0, 0
+    cached, when = _diffstats.get(path, ((0, 0), 0))
+    if time.time() - when < GIT_TTL:
+        return cached
+    base = "HEAD"
+    for candidate in BASES:
+        found = subprocess.run(
+            ("git", "-C", path, "merge-base", "HEAD", candidate),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            universal_newlines=True, check=False,
+        )
+        if found.returncode == 0 and found.stdout.strip():
+            base = found.stdout.strip()
+            break
+    numstat = subprocess.run(
+        ("git", "-C", path, "diff", "--numstat", base),
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        universal_newlines=True, check=False,
+    )
+    added = removed = 0
+    if numstat.returncode == 0:
+        for line in numstat.stdout.splitlines():
+            cols = line.split("\t")
+            if len(cols) >= 2:
+                added += int(cols[0]) if cols[0].isdigit() else 0
+                removed += int(cols[1]) if cols[1].isdigit() else 0
+    result = added, removed
+    _diffstats[path] = (result, time.time())
+    return result
+
+
 def apply(window, record):
+    cwd = record.get("cwd", "")
+    added, removed = diffstat(cwd)
     for option, value in (
         # Normalise: a state file written before "idle" existed, or one
         # truncated mid-write, must not read as "not an agent window".
         ("@agent_state", record.get("state") or "idle"),
         ("@agent_title", record.get("title", "")),
+        ("@agent_title_by", record.get("title_by", "")),
         ("@agent_kind", record.get("agent", "")),
-        ("@agent_cwd", record.get("cwd", "")),
-        ("@agent_branch", branch(record.get("cwd", ""))),
+        ("@agent_cwd", cwd),
+        ("@agent_owner", record.get("owner", "")),
+        ("@agent_thread", record.get("thread", "")),
+        ("@agent_since", str(record.get("since", 0))),
+        ("@agent_branch", branch(cwd)),
+        ("@agent_added", str(added)),
+        ("@agent_removed", str(removed)),
     ):
         tmux("set-option", "-w", "-t", window, option, value)
     # An agent prints continuously, so the activity flag is on permanently
@@ -121,56 +198,124 @@ def apply(window, record):
     tmux("set-option", "-w", "-t", window, "monitor-activity", "off")
 
 
-def mark_seen(path, record):
-    record["state"] = "idle"
+def write_state(path, record, state):
+    record["state"] = state
     record["since"] = int(time.time())
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(record))
     tmp.replace(path)
 
 
-def sync_once(decorated):
-    live = windows()
-    if live is None:
-        return decorated
+def migrate_legacy(server, panes):
+    """Turn the last window records into stable session records once."""
+    by_window = {}
+    for pane, window in panes.items():
+        by_window.setdefault(window, []).append(pane)
+    SESSION_DIR.mkdir(parents=True, exist_ok=True)
+
+    for legacy_path in STATE_DIR.glob("@*.json"):
+        try:
+            legacy = json.loads(legacy_path.read_text())
+        except (OSError, ValueError):
+            continue
+        owner = legacy.get("owner", "")
+        candidates = by_window.get(legacy_path.stem, [])
+        if legacy.get("state") == "free":
+            remove(legacy_path)
+            continue
+        if not owner or not candidates:
+            continue
+
+        target = SESSION_DIR / f"{owner.replace('/', '_')}.json"
+        try:
+            current = json.loads(target.read_text())
+        except (OSError, ValueError):
+            current = {}
+        record = dict(legacy)
+        record.update(current)
+        if (legacy.get("title_by") == "agent"
+                and current.get("title_by") != "agent"):
+            record.update({"title": legacy.get("title", ""),
+                           "title_by": "agent"})
+        if (legacy.get("cwd_by") == "agent"
+                and current.get("cwd_by") != "agent"):
+            record.update({"cwd": legacy.get("cwd", ""),
+                           "cwd_by": "agent"})
+        pane = (record.get("pane") if record.get("pane") in candidates
+                else candidates[0])
+        modified = int(legacy_path.stat().st_mtime * 1000)
+        record.update({"owner": owner, "server": server, "pane": pane})
+        record.setdefault("started", modified)
+        record.setdefault("updated", modified)
+        record.pop("slot", None)
+        record.pop("bound_by", None)
+        tmp = target.with_suffix(".tmp")
+        tmp.write_text(json.dumps(record))
+        tmp.replace(target)
+        remove(legacy_path)
+
+
+def sync_once():
+    snapshot = windows()
+    if snapshot is None:
+        return False
+    live, decorated, server, panes = snapshot
+    migrate_legacy(server, panes)
 
     current = set()
     counts = {"blocked": 0, "done": 0}
-    for path in STATE_DIR.glob("*.json"):
-        slot = path.stem
+    selected = {}
+    for path in SESSION_DIR.glob("*.json"):
         try:
             record = json.loads(path.read_text())
         except (OSError, ValueError):
             continue
-
-        if slot not in live:
-            remove(path)  # window is gone for good
+        if record.get("server") != server or record.get("pane") not in panes:
             continue
+        slot = panes[record["pane"]]
+        score = (record.get("started", record.get("updated", 0)),
+                 record.get("state") != "free", record.get("updated", 0))
+        if slot not in selected or score > selected[slot][0]:
+            selected[slot] = score, path, record
 
+    for slot, (_score, path, record) in selected.items():
         # Visiting the window is what clears a `done` marker. Deliberately
         # not applied to `blocked` -- looking at it is not answering it.
-        if record.get("state") == "done" and live[slot]:
-            mark_seen(path, record)
+        active, commands = live[slot]
+        at_shell = commands and all(command in SHELLS for command in commands)
+        if record.get("state") == "done" and active:
+            write_state(path, record, "idle")
             record["state"] = "idle"
+        elif record.get("state") == "free" and not at_shell:
+            # A reused agent pane is occupied before its new agent hook runs.
+            write_state(path, record, "idle")
+            record["state"] = "idle"
+        elif record.get("state") != "free" and at_shell:
+            write_state(path, record, "free")
+            record["state"] = "free"
 
         apply(slot, record)
         current.add(slot)
         if record.get("state") in counts:
             counts[record["state"]] += 1
 
+    clear = []
     for slot in decorated - current:
         if slot in live:
             for option in OPTIONS:
-                tmux("set-option", "-w", "-t", slot, "-u", option)
-            tmux("set-option", "-w", "-t", slot, "-u", "monitor-activity")
+                clear.extend(("set-option", "-w", "-t", slot, "-u", option, ";"))
+            clear.extend(("set-option", "-w", "-t", slot, "-u",
+                          "monitor-activity", ";"))
+    if clear:
+        tmux(*clear[:-1])
 
     tmux("set-option", "-g", "@agent_blocked", str(counts["blocked"]))
     tmux("set-option", "-g", "@agent_done", str(counts["done"]))
 
-    return current
+    return True
 
 
-def single_instance():
+def single_instance(server):
     """Hold an exclusive lock for as long as we run, so sourcing .tmux.conf
     repeatedly cannot stack up daemons.
 
@@ -181,7 +326,7 @@ def single_instance():
     The handle is deliberately kept alive for the process lifetime -- if it
     were garbage collected the lock would be released.
     """
-    lock = open(STATE_DIR / "sync.lock", "w")
+    lock = open(STATE_DIR / f"sync-{server}.lock", "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
@@ -190,17 +335,38 @@ def single_instance():
 
 
 def main():
+    # Let a retained old hook load the config that removes it. This makes an
+    # existing tmux server upgrade itself on the next window switch.
     if len(sys.argv) == 3 and sys.argv[1] == "focus":
-        write_focus(sys.argv[2])
+        tmux("source-file", str(pathlib.Path.home() / ".tmux.agents.conf"))
         return
+    if len(sys.argv) == 3 and sys.argv[1] == "migrate":
+        try:
+            links = json.loads(WINDOW_PATH.read_text())
+        except (OSError, ValueError):
+            sys.exit("agent-sync: no tmux window snapshot")
+        migrate_legacy(sys.argv[2], {row["pane"]: row["id"] for row in links})
+        return
+    if len(sys.argv) == 4 and sys.argv[1] == "clear":
+        server, pane = sys.argv[2:]
+        for path in SESSION_DIR.glob("*.json"):
+            try:
+                record = json.loads(path.read_text())
+            except (OSError, ValueError):
+                continue
+            if record.get("server") == server and record.get("pane") == pane:
+                remove(path)
+        return
+    if len(sys.argv) != 3 or sys.argv[1] != "daemon":
+        sys.exit("usage: agent-sync daemon|migrate <server> | "
+                 "clear <server> <pane>")
+    server = sys.argv[2]
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    _lock = single_instance()  # noqa: F841 -- must outlive main()
-    if windows() is None:
-        sys.exit("agent-sync: no tmux server")
-    decorated = set()
+    _lock = single_instance(server)  # noqa: F841 -- must outlive main()
     while True:
         try:
-            decorated = sync_once(decorated)
+            if not sync_once():
+                sys.exit("agent-sync: no tmux server")
         except Exception as exc:  # one bad cycle must not kill the daemon
             print(f"agent-sync: {exc}", file=sys.stderr)
         time.sleep(INTERVAL)
