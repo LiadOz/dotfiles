@@ -51,8 +51,9 @@ if command -v jq &>/dev/null && [ -f "$CLAUDE_SETTINGS" ]; then
   fi
 fi
 
-# Agent status hooks: drive the tmux-agent-status plugin via agent-state.
-# Additive and idempotent -- leaves any hooks you already have alone.
+# Agent status hooks: drive the tmux status icons via agent-state.
+# See tmux/.tmux.agents.conf. Additive and idempotent -- leaves any hooks you
+# already have on these events alone.
 #
 # Deliberately not Notification: its permission_prompt path is gated behind a
 # 6s user-idle check that never accumulates while the agent is thinking, so
@@ -122,3 +123,4 @@ if [ -d "$HOME/.local/share/kokoro-fastapi" ]; then
   # most want an agent to be able to shout.
   loginctl enable-linger "$USER" &>/dev/null
 fi
+

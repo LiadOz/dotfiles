@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""fzf window picker, agent-aware. Bound to prefix f, inside display-popup.
+
+Lists every window, so this is the only switcher you need. Agent windows
+sort above ordinary ones, and among the agents the ordering is the point:
+whoever needs you is at the top. Within the finished group the one that just
+finished sits above the one that finished an hour ago, so the bottom of that
+group is the work that has been waiting longest.
+"""
+import glob
+import json
+import re
+import sqlite3
+import pathlib
+import subprocess
+import sys
+
+# Field separator for tmux -F output. Not a tab: the tmux build on tlv
+# replaces tabs in -F output with underscores, so every line parsed as a
+# single field, both scripts saw zero windows, and the whole thing was
+# silently inert there. A printable multi-character token survives that and
+# will not occur in a window name, a title taken from a prompt, or a branch.
+SEP = ":::"
+
+# state -> (rank, icon, colour)
+STATES = {
+    "blocked": (0, "BLOCK", "\033[31;1m"),      # needs you
+    "done":    (1, "DONE ", "\033[38;5;154m"),  # matches the activity colour
+    "working": (2, "WORK ", "\033[33m"),
+    "idle":    (3, "IDLE ", "\033[90m"),  # agent present, nothing pending
+    "free":    (4, "FREE ", "\033[38;5;180m"),  # shell ready for reuse
+}
+PLAIN = (5, "     ", "")                         # not an agent window
+RESET = "\033[0m"
+DIM = "\033[90m"
+GREEN = "\033[32m"
+RED = "\033[31m"
+ANSI = re.compile(r"\033\[[0-9;]*m")
+
+# claude writes one of these per running session, holding the name from
+# /rename and the session id also stored by agent-state.
+CLAUDE_SESSIONS = pathlib.Path.home() / ".claude/sessions"
+
+# codex keeps thread titles in sqlite rather than one file per session, and
+# renaming a thread fires no hook -- so the title has to be read live, the
+# same way claude's is.
+CODEX_STATE = str(pathlib.Path.home() / ".codex/state_*.sqlite")
+
+# Live view of the highlighted window, so a permission prompt can be read
+# without leaving the picker. {1} is the window id, the hidden first field.
+# The awk trims trailing blank lines: a pane is usually mostly empty below
+# the prompt, and without this the preview shows a screen of nothing.
+#
+# The tail is what puts the bottom of the pane on screen. Scrolling with the
+# preview-window +N offset does not work: it puts line N at the TOP, so the
+# last line ends up alone above a screen of nothing. `follow` is for output
+# still being written and does nothing here either.
+PREVIEW = (
+    "tmux capture-pane -p -e -t {1} | "
+    "awk 'NF{p=NR} {l[NR]=$0} END{for(i=1;i<=p;i++) print l[i]}' | "
+    "tail -n 25"
+)
+CONFIG_VERSION = "4"
+
+
+def session_names():
+    """session id -> the name you gave that claude session with /rename."""
+    named = {}
+    if not CLAUDE_SESSIONS.is_dir():
+        return named
+    for path in CLAUDE_SESSIONS.glob("*.json"):
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        # "derived" is claude's own auto-name, e.g. prgit-rbs-91 -- less
+        # informative than anything else we could show.
+        if (record.get("sessionId") and record.get("name")
+                and record.get("nameSource") != "derived"):
+            named[record["sessionId"]] = record["name"]
+    return named
+
+
+def codex_title(record):
+    """Live title of a codex thread.
+
+    Ranked below a name an agent chose for itself: codex derives this from
+    the first message of the thread and never revisits it, so it ages badly
+    on a long session, while an agent renames itself as the work settles.
+
+    `owner` is the same id under the name the remote-agent code stores it.
+    """
+    thread = record.get("thread") or record.get("owner")
+    if not thread:
+        return ""
+    databases = sorted(glob.glob(CODEX_STATE))
+    if not databases:
+        return ""
+    try:
+        # read-only: codex is writing to this, WAL and all.
+        con = sqlite3.connect("file:%s?mode=ro" % databases[-1], uri=True)
+        row = con.execute(
+            "SELECT title FROM threads WHERE id = ?", (thread,)).fetchone()
+        con.close()
+    except sqlite3.Error:
+        return ""
+    return (row[0] or "")[:44] if row else ""
+
+
+def tmux(*args):
+    return subprocess.run(("tmux",) + args, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, universal_newlines=True,
+                          check=False)
+
+
+def tmux_windows():
+    result = tmux("list-windows", "-a", "-F",
+                  SEP.join(("#{window_id}", "#{session_name}",
+                            "#{window_index}", "#{window_name}",
+                            "#{window_active}", "#{pane_current_command}",
+                            "#{@agent_branch}", "#{@agent_added}",
+                            "#{@agent_removed}", "#{@agent_state}",
+                            "#{@agent_title}", "#{@agent_title_by}",
+                            "#{@agent_kind}", "#{@agent_owner}",
+                            "#{@agent_thread}", "#{@agent_since}")))
+    if result.returncode != 0:
+        sys.exit("agent-pick: no tmux server")
+    found = {}
+    for line in result.stdout.splitlines():
+        parts = line.split(SEP)
+        if len(parts) == 16:
+            found[parts[0]] = parts[1:]
+    return found
+
+
+def collect():
+    rows = []
+    named = session_names()
+    for slot, (session, index, name, active, command, head,
+               added, removed, state, title, title_by, kind, owner,
+               thread, since) in tmux_windows().items():
+        record = ({"state": state, "title": title, "title_by": title_by,
+                   "agent": kind, "owner": owner, "thread": thread,
+                   "since": int(since or 0)} if state else None)
+        # Same rule the status bar uses: a window running an agent counts as
+        # one even before any hook has fired, otherwise the two disagree.
+        if record is None and command in ("claude", "codex"):
+            record = {"state": "idle"}
+        if record is None:
+            rank, icon, colour = PLAIN
+            label, head = name, ""
+            added = removed = 0
+        else:
+            rank, icon, colour = STATES.get(record.get("state", ""), STATES["idle"])
+            # The agent's own name is authoritative. A manual /rename is
+            # next, followed by codex's derived title and the opening prompt.
+            agent_named = (record.get("title")
+                           if record.get("title_by") == "agent" else "")
+            label = (agent_named
+                     or named.get(record.get("owner", ""))
+                     or (codex_title(record)
+                         if record.get("agent") == "codex" else "")
+                     or record.get("title") or name)
+            added = int(added or 0)
+            removed = int(removed or 0)
+        rows.append({
+            "slot": slot, "session": session, "index": index, "label": label,
+            "branch": head, "added": added, "removed": removed,
+            "active": active == "1", "rank": rank,
+            "icon": icon, "colour": colour,
+            "since": (record or {}).get("since", 0),
+        })
+
+    # agents first -- blocked, most-recently-finished, working, quiet --
+    # then every other window in index order.
+    rows.sort(key=lambda r: (r["rank"], -r["since"], int(r["index"])))
+    return rows
+
+
+def render(rows):
+    width = min(max((len(r["label"]) for r in rows), default=20), 44)
+    multiple_sessions = len({r["session"] for r in rows}) > 1
+    lines = []
+    for row in rows:
+        label = row["label"][:width].ljust(width)
+        here = ">" if row["active"] else " "
+        location = (f"{row['session']}:{row['index']}" if multiple_sessions
+                    else row["index"])
+        lines.append(
+            f"{row['slot']}{SEP}{row['colour']}{row['icon']}{RESET}"
+            f"{here} {row['colour']}{label}{RESET}  "
+            f"{DIM}{location}  {row['branch']}{RESET}"
+            + (f"  {GREEN}+{row['added']}{RESET} {RED}-{row['removed']}{RESET}"
+               if row["added"] or row["removed"] else "")
+        )
+    return lines
+
+
+def main():
+    if tmux("show-option", "-gqv", "@agent_config_version").stdout.strip() != CONFIG_VERSION:
+        tmux("source-file", str(pathlib.Path.home() / ".tmux.agents.conf"))
+    rows = collect()
+    if not rows:
+        return
+
+    # stdout only, never capture_output: fzf draws its interface on stderr,
+    # so capturing that sends the whole UI into a pipe and the popup shows
+    # nothing at all.
+    lines = render(rows)
+    fzf = subprocess.run(
+        ("fzf", "--ansi", "--reverse", "--delimiter=" + SEP, "--with-nth=2..",
+         "--no-sort", "--info=inline", "--prompt=window > ",
+         "--header=BLOCK needs you   DONE unseen   WORK running   FREE reusable   (ctrl-/ hides preview)",
+         "--preview", PREVIEW, "--preview-window", "right:55%:wrap",
+         "--bind", "ctrl-/:toggle-preview"),
+        input="\n".join(lines), stdout=subprocess.PIPE, universal_newlines=True,
+        check=False,
+    )
+    if fzf.returncode != 0 or not fzf.stdout.strip():
+        return
+
+    selected = fzf.stdout.rstrip()
+    slot = next((line.split(SEP, 1)[0] for line in lines
+                 if ANSI.sub("", line.split(SEP, 1)[1]).rstrip() == selected), "")
+    if not slot:
+        return
+    session = tmux("display-message", "-p", "-t", slot,
+                   "#{session_name}").stdout.strip()
+    current = tmux("display-message", "-p", "#{session_name}").stdout.strip()
+    tmux("select-window", "-t", slot)
+    if session and session != current:
+        tmux("switch-client", "-t", session)
+
+
+if __name__ == "__main__":
+    main()
