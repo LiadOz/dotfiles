@@ -58,6 +58,7 @@ PREVIEW = (
     "awk 'NF{p=NR} {l[NR]=$0} END{for(i=1;i<=p;i++) print l[i]}' | "
     "tail -n 25"
 )
+WINDOW_NAME = "#{?@agent_title,#{@agent_title},#{pane_current_command}}"
 
 
 def session_names():
@@ -191,6 +192,8 @@ def render(rows):
 
 
 def main():
+    # Also activates the format in an existing server after a dotfiles update.
+    tmux("set-option", "-wg", "automatic-rename-format", WINDOW_NAME)
     rows = collect()
     if not rows:
         return
