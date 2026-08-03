@@ -2,8 +2,8 @@
 """Record one coding-agent session for the tmux status bar.
 
 The agent may run on LSF and cannot contact the tmux server. The tmux host
-publishes its focused pane; this script binds the session to that pane when a
-prompt arrives, and agent-sync performs the pane-to-window mapping.
+publishes its focused pane; this script binds each session there once, and
+agent-sync performs the pane-to-window mapping.
 """
 import json
 import os
@@ -71,6 +71,7 @@ def focused_pane():
 
 def save(value, record, bind=False):
     record["owner"] = value
+    target = session_path(value)
     if bind or not record.get("server") or not record.get("pane"):
         server, pane = focused_pane()
         if server and pane:
@@ -78,9 +79,17 @@ def save(value, record, bind=False):
                 record["started"] = int(time.time() * 1000)
             record["server"] = server
             record["pane"] = pane
+            for other in SESSION_DIR.glob("*.json"):
+                if other == target:
+                    continue
+                try:
+                    old = json.loads(other.read_text())
+                except (OSError, ValueError):
+                    continue
+                if old.get("server") == server and old.get("pane") == pane:
+                    remove(other)
     record["updated"] = int(time.time() * 1000)
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
-    target = session_path(value)
     tmp = target.with_suffix(".tmp")
     tmp.write_text(json.dumps(record))
     tmp.replace(target)
@@ -180,6 +189,8 @@ def cmd_hook(args):
 
     record = load(value)
     if ending:
+        if not record:
+            return
         set_state(value, record, "free", agent=kind,
                   cwd=record.get("cwd", "") or data.get("cwd", ""),
                   thread=thread_id(data))
@@ -188,10 +199,13 @@ def cmd_hook(args):
     state = EVENTS[event]
 
     if event == "SessionStart":
+        if record.get("pane") and record.get("state") != "free":
+            return
         record.setdefault("started", int(time.time() * 1000))
         cwd = record.get("cwd", "") or data.get("cwd", "")
         set_state(value, record, "idle", agent=kind, cwd=cwd,
-                  thread=thread_id(data), bind=True)
+                  thread=thread_id(data),
+                  bind=not record.get("pane") or record.get("state") == "free")
         return
 
     # Most PostToolUse events only refresh the directory; avoid rewriting the
@@ -220,7 +234,7 @@ def cmd_hook(args):
         workdir = transcript_workdir(data)
     cwd = workdir or record.get("cwd", "") or data.get("cwd", "")
     set_state(value, record, state, agent=kind, cwd=cwd,
-              thread=thread_id(data), bind=event == "UserPromptSubmit", **extra)
+              thread=thread_id(data), bind=not record.get("pane"), **extra)
 
 
 def session_name(session_id):
