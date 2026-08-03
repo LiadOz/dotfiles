@@ -196,6 +196,7 @@ def apply(window, record):
         tmux("set-option", "-w", "-t", window, option, value)
     # An agent prints continuously, so the activity flag is on permanently
     # and tells you nothing. The state word is the signal here.
+    tmux("set-option", "-w", "-t", window, "automatic-rename", "on")
     tmux("set-option", "-w", "-t", window, "monitor-activity", "off")
 
 
@@ -310,6 +311,8 @@ def sync_once():
                 clear.extend(("set-option", "-w", "-t", slot, "-u", option, ";"))
             clear.extend(("set-option", "-w", "-t", slot, "-u",
                           "monitor-activity", ";"))
+            clear.extend(("set-option", "-w", "-t", slot,
+                          "automatic-rename", "on", ";"))
     if clear:
         tmux(*clear[:-1])
 
