@@ -9,7 +9,6 @@ group is the work that has been waiting longest.
 """
 import glob
 import json
-import re
 import sqlite3
 import pathlib
 import subprocess
@@ -35,7 +34,6 @@ RESET = "\033[0m"
 DIM = "\033[90m"
 GREEN = "\033[32m"
 RED = "\033[31m"
-ANSI = re.compile(r"\033\[[0-9;]*m")
 
 # claude writes one of these per running session, holding the name from
 # /rename and the session id also stored by agent-state.
@@ -219,9 +217,7 @@ def main():
     if fzf.returncode != 0 or not fzf.stdout.strip():
         return
 
-    selected = fzf.stdout.rstrip()
-    slot = next((line.split(SEP, 1)[0] for line in lines
-                 if ANSI.sub("", line.split(SEP, 1)[1]).rstrip() == selected), "")
+    slot = fzf.stdout.split(SEP, 1)[0]
     if not slot:
         return
     session = tmux("display-message", "-p", "-t", slot,
