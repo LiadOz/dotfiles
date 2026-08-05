@@ -92,25 +92,36 @@ RESUMES=(
 )
 
 # A sentence at a time, so that being interrupted has a place to resume from:
-# whichever sentence you cut off, said again from its start.
+# whichever sentence you cut off, said again from its start. Synthesize the
+# next sentence while the current one plays so synthesis does not become a
+# long pause between sentences.
 say() {  # $1 text, $2 voice
   local -a parts
   mapfile -t parts < <(sed 's/\([.!?]\)  */\1\n/g' <<<"$1")
-  local cut_at i=0
+  local cut_at current next synth_job= i=0
+  synth "${parts[0]}" "$WAV.0" "$2"
   while [ "$i" -lt "${#parts[@]}" ]; do
     wait_for_mic || return 0
-    synth "${parts[i]}" "$WAV" "$2"
-    if play "$WAV"; then
+    current=$WAV.$((i % 2))
+    synth_job=
+    if [ $((i + 1)) -lt "${#parts[@]}" ]; then
+      next=$WAV.$(((i + 1) % 2))
+      synth "${parts[i + 1]}" "$next" "$2" &
+      synth_job=$!
+    fi
+    if play "$current"; then
+      [ -z "$synth_job" ] || wait "$synth_job"
       i=$((i + 1))
       continue
     fi
+    [ -z "$synth_job" ] || wait "$synth_job"
     # Resume only if you cut in briefly. Say something substantial and the
     # rest of this is stale news -- picking it up again would be odd.
     cut_at=$SECONDS
     wait_for_mic || return 0
     [ $((SECONDS - cut_at)) -lt 20 ] || return 0
-    synth "${RESUMES[RANDOM % ${#RESUMES[@]}]}" "$WAV" "$2"
-    play "$WAV"
+    synth "${RESUMES[RANDOM % ${#RESUMES[@]}]}" "$WAV.resume" "$2"
+    play "$WAV.resume"
   done
 }
 
@@ -136,8 +147,9 @@ fetch() {
   done
 }
 
-WAV=$(mktemp)
-trap 'rm -f "$WAV"' EXIT
+WAV_DIR=$(mktemp -d "${TMPDIR:-/tmp}/agent-say.XXXXXX")
+WAV=$WAV_DIR/sentence
+trap 'rm -rf "$WAV_DIR"' EXIT
 mkdir -p "$SPOOL"
 [ -n "$HOSTS" ] && fetch &
 
