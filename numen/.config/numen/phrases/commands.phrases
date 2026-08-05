@@ -5,7 +5,11 @@ computer dictate: run numen-control dictate
 
 # Spoken narration controls.
 stop talking: run agent-say stop
+pause talking: run agent-say pause
+resume talking: run agent-say resume
 computer stop talking: run agent-say stop
+computer pause talking: run agent-say pause
+computer resume talking: run agent-say resume
 computer silence agents: run agent-say stop \
 	run agent-say level silent >/dev/null
 computer talk to me: run agent-say level narrate >/dev/null

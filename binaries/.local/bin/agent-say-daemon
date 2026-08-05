@@ -113,6 +113,7 @@ synth() {  # $1 text, $2 file, $3 voice
 
 # A changing token is an explicit request to stop the sentence in progress.
 stop_id() { cat "$STATE/stop" 2>/dev/null || echo 0; }
+paused() { [ "$(cat "$STATE/playback" 2>/dev/null)" = pause ]; }
 
 # Play one sentence. Returns 1 if you started talking part way through it, or
 # 2 for an explicit stop request.
@@ -123,14 +124,33 @@ play() {  # $1 audio, $2 stop token captured when this note began
     device=(--device="$PLAYBACK_SINK")
   fi
   paplay "${device[@]}" --raw --format=s16le --rate=24000 --channels=1 "$1" &
-  local job=$! cut=0 stopped=0
+  local job=$! cut=0 stopped=0 held=0
+  if paused; then
+    kill -STOP "$job" 2>/dev/null
+    held=1
+  fi
   while kill -0 "$job" 2>/dev/null; do
     if [ "$(stop_id)" != "$2" ]; then
+      [ "$held" -eq 0 ] || kill -CONT "$job" 2>/dev/null
       kill "$job" 2>/dev/null
       stopped=1
       break
     fi
-    mic_busy && kill "$job" 2>/dev/null && cut=1 && break
+    if paused; then
+      if [ "$held" -eq 0 ]; then
+        kill -STOP "$job" 2>/dev/null
+        held=1
+      fi
+    elif [ "$held" -eq 1 ]; then
+      kill -CONT "$job" 2>/dev/null
+      held=0
+    fi
+    if mic_busy; then
+      [ "$held" -eq 0 ] || kill -CONT "$job" 2>/dev/null
+      kill "$job" 2>/dev/null
+      cut=1
+      break
+    fi
     sleep 0.2
   done
   wait "$job" 2>/dev/null

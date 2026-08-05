@@ -127,6 +127,7 @@ fi
 # Numen itself is installed user-locally because Ubuntu does not package it.
 # Once its runtime is present, keep whole-machine voice commands available.
 if [ -x "$HOME/.local/libexec/numen/numen" ]; then
+  "$HOME/.local/bin/numen-tune-model"
   systemctl --user daemon-reload
   systemctl --user enable --now voice-echo-cancel.service numen.service &>/dev/null &&
     echo "voice echo cancellation, numen: enabled"

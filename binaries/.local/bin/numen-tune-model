@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Use Numen's documented responsive Vosk endpoint settings. Commands should
+# finalize after a short pause rather than feeling a full second behind.
+set -euo pipefail
+
+MODEL=${NUMEN_MODEL:-$HOME/.local/share/numen/models/small-en-us}
+CONFIG=$MODEL/conf/model.conf
+
+[ -f "$CONFIG" ] || {
+  echo "numen-tune-model: model config not found: $CONFIG" >&2
+  exit 1
+}
+
+set_value() {
+  local key=$1 value=$2
+  if grep -q "^--$key=" "$CONFIG"; then
+    sed -i "s/^--$key=.*/--$key=$value/" "$CONFIG"
+  else
+    printf '%s\n' "--$key=$value" >> "$CONFIG"
+  fi
+}
+
+set_value endpoint.rule2.min-trailing-silence 0.25
+set_value endpoint.rule3.min-trailing-silence 0.25
+set_value endpoint.rule4.min-trailing-silence 0.3

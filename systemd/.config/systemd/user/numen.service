@@ -6,6 +6,7 @@ Wants=numen-handy-watch.service
 
 [Service]
 Environment=PULSE_SOURCE=voice_control_source
+ExecStartPre=%h/.local/bin/numen-tune-model
 ExecStart=%h/.local/bin/numen --mic=pulse %h/.config/numen/phrases/commands.phrases
 Restart=always
 RestartSec=2
