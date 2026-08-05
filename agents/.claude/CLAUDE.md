@@ -31,7 +31,9 @@ Once you know what you are actually working on, run:
 
     agent-state name '<short description>'
 
-Under about 40 characters, lowercase, no trailing punctuation.
+Run it from the worktree you are using so the picker shows its branch and
+diff. Keep it under about 40 characters, lowercase, with no trailing
+punctuation.
 
 Then keep it. The name is how I find this session again, so it should stay
 recognisable for as long as we are on the same task. Treat renaming as the
@@ -47,3 +49,10 @@ exception, not something to revisit each turn.
 Then tell me, in one short line, what you named it. I may rename the session
 itself to match, so the two stay consistent. Do not rename the session
 yourself.
+
+## Installing dotfiles changes
+
+Treat `~/dotfiles` as the deployed checkout. Never switch or reset it to one
+feature branch: another agent's installed commits may be there already. Work
+in a separate worktree, integrate both histories, then fast-forward
+`~/dotfiles` so installing one change cannot silently remove another.
