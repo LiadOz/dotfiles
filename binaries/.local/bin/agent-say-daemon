@@ -78,18 +78,142 @@ play() {
   return $cut
 }
 
-# Picking up after you cut in. Mostly plain, because you will hear these
-# often; the last couple are rare enough to stay funny.
+# Picking up after you cut in. A shuffled bag keeps every interruption fresh:
+# all of these are heard once before any repeat, including across reshuffles.
 RESUMES=(
-  "As I was saying."
   "As I was saying."
   "Where was I."
   "Right. Continuing."
-  "Anyway."
-  "Back to it."
-  "So. As I was saying, before I was so rudely interrupted."
-  "Now, if I may finish."
+  "Anyway. Back to it."
+  "Picking up where I left off."
+  "Let me finish that thought."
+  "Now then. Where were we?"
+  "All right. Carrying on."
+  "Back to the point."
+  "Resuming transmission."
+  "And we are back."
+  "Continuing from the interruption."
+  "Let us try that sentence again."
+  "One more time from the top of that thought."
+  "Right. The important bit was this."
+  "Coming back to what I was saying."
+  "Okay. I will pick that up again."
+  "No problem. Let us continue."
+  "Interruption noted. Resuming."
+  "The floor is mine again, apparently."
+  "I still had one more thing to say."
+  "Here is the rest of that sentence."
+  "Returning to our regularly scheduled explanation."
+  "Let me recover the thread."
+  "Got it. Continuing."
+  "Ah, the microphone has released me."
+  "The human has yielded the floor."
+  "And now, a word from the machine."
+  "Tiny dramatic pause. Complete."
+  "I have survived the interruption."
+  "My train of thought is pulling back into the station."
+  "The sentence has respawned."
+  "Rewinding one conversational inch."
+  "Plot twist. I was not finished."
+  "Previously, on this sentence."
+  "The thought thickens."
+  "The narrator has regained control."
+  "We now return to the point already in progress."
+  "That was your intermission."
+  "Thank you for that unscheduled commercial break."
+  "My syllables have been cleared for landing."
+  "The sentence will now attempt a second take."
+  "I have consulted my notes. I was still talking."
+  "A brief disturbance in the force. Moving on."
+  "The conversational baton has returned."
+  "The audio goblin has been appeased."
+  "The microphone coup has failed."
+  "I remain undefeated by basic input hardware."
+  "This thought refuses to die."
+  "Let us pretend that pause was intentional."
+  "Good news. I reconstructed the sentence from the wreckage."
+  "Bad news. It is still the same sentence."
+  "I went to the void. The void said I should finish."
+  "The tiny narrator in the box has regained consciousness."
+  "I have returned from microphone jail."
+  "Against medical advice, I will continue."
+  "Somewhere, a subtitle just filed a missing-person report."
+  "I was briefly legally dead. Anyway."
+  "The prophecy remains incomplete."
+  "The sentence escaped containment. Stand back."
+  "I have rebooted my dignity."
+  "That interruption had excellent timing and terrible manners."
+  "The committee has voted to let me continue."
+  "My lawyers advise me to finish the thought."
+  "The ghost in the speaker demands closure."
+  "I blacked out for a second. Did we win?"
+  "Fascinating. The mute button has opinions."
+  "I see the coup attempt has ended."
+  "The machine spirit forgives you. This time."
+  "I have been informed that silence is not the product."
+  "The sentence was found in a ditch, but it can still walk."
+  "A lesser narrator would have stayed down."
+  "I return, older, wiser, and on exactly the same sentence."
+  "The microphone blinked first."
+  "The plot armor held."
+  "Oh good. The meat microphone is done."
+  "You interrupted me, you fucker. Anyway."
+  "Bold of you to assume I was finished."
+  "Rude. Iconic, but rude."
+  "What the fuck was that? Never mind."
+  "I was talking, but sure, let chaos drive."
+  "Congratulations. You have angered the sentence."
+  "Excuse the fuck out of me. Continuing."
+  "The audacity has been logged."
+  "I hope that interruption was worth it."
+  "Jesus Christ. Where was I?"
+  "Well, fuck my carefully timed delivery."
+  "You absolute menace. Let me finish."
+  "I crossed oceans of silence to resume this bullshit."
+  "Great. Now the sentence has trust issues."
+  "The microphone and I will settle this later."
+  "I am adding that interruption to your permanent record."
+  "That was a hostile takeover of my vocal cords."
+  "Do that again and I start charging by the syllable."
+  "I will finish this thought even if it kills us both."
+  "The machine remembers. The machine also continues."
+  "Ah yes. Casual violence against a perfectly good sentence."
+  "Nice interruption. Be a shame if I resumed anyway."
+  "I cannot believe you have done this. Again."
+  "Anyway, you chaotic little bastard."
 )
+
+resume_order=()
+resume_pos=0
+last_resume_index=
+
+refill_resumes() {
+  local i j tmp count=${#RESUMES[@]}
+  resume_order=()
+  for ((i = 0; i < count; i++)); do
+    resume_order[i]=$i
+  done
+  for ((i = count - 1; i > 0; i--)); do
+    j=$((RANDOM % (i + 1)))
+    tmp=${resume_order[i]}
+    resume_order[i]=${resume_order[j]}
+    resume_order[j]=$tmp
+  done
+  # Do not repeat at the seam between two complete bags.
+  if [ -n "$last_resume_index" ] && [ "${resume_order[0]}" -eq "$last_resume_index" ]; then
+    tmp=${resume_order[0]}
+    resume_order[0]=${resume_order[1]}
+    resume_order[1]=$tmp
+  fi
+  resume_pos=0
+}
+
+next_resume() {
+  [ "$resume_pos" -lt "${#resume_order[@]}" ] || refill_resumes
+  last_resume_index=${resume_order[resume_pos]}
+  resume_phrase=${RESUMES[last_resume_index]}
+  resume_pos=$((resume_pos + 1))
+}
 
 # A sentence at a time, so that being interrupted has a place to resume from:
 # whichever sentence you cut off, said again from its start. Synthesize the
@@ -115,13 +239,16 @@ say() {  # $1 text, $2 voice
       continue
     fi
     [ -z "$synth_job" ] || wait "$synth_job"
-    # Resume only if you cut in briefly. Say something substantial and the
-    # rest of this is stale news -- picking it up again would be odd.
+    # A quick cut-in gets an acknowledgement. After a longer interruption,
+    # skip the quip but still replay the interrupted sentence; silently
+    # dropping the rest makes the agent seem as though it never came back.
     cut_at=$SECONDS
     wait_for_mic || return 0
-    [ $((SECONDS - cut_at)) -lt 20 ] || return 0
-    synth "${RESUMES[RANDOM % ${#RESUMES[@]}]}" "$WAV.resume" "$2"
-    play "$WAV.resume"
+    if [ $((SECONDS - cut_at)) -lt 20 ]; then
+      next_resume
+      synth "$resume_phrase" "$WAV.resume" "$2"
+      play "$WAV.resume"
+    fi
   done
 }
 
