@@ -1,0 +1,41 @@
+# Free-form speech belongs to Handy. Requiring "computer" makes ordinary
+# conversation very unlikely to become an action before Handy's watcher has
+# noticed that recording began.
+computer dictate: run numen-control dictate
+
+# Spoken narration controls.
+stop talking: run agent-say stop
+computer stop talking: run agent-say stop
+computer silence agents: run agent-say stop \
+	run agent-say level silent >/dev/null
+computer talk to me: run agent-say level narrate >/dev/null
+
+# A safe starter vocabulary for whole-machine control. Handy handles typing;
+# these phrases handle common keys, windows, pointer actions, and editing.
+computer press enter: press Return
+computer press escape: press Escape
+computer press tab: press Tab
+computer click: click left
+computer right click: click right
+computer double click: click left \
+	click left
+computer scroll up: wheel 5
+computer scroll down: wheel -5
+computer next window: press alt+Tab
+computer previous window: press alt+shift+Tab
+computer close window: press alt+F4
+computer page up: press Prior
+computer page down: press Next
+computer move left: press Left
+computer move right: press Right
+computer move up: press Up
+computer move down: press Down
+computer copy: press ctrl+c
+computer paste: press ctrl+v
+computer undo: press ctrl+z
+computer redo: press ctrl+shift+z
+computer save: press ctrl+s
+computer select all: press ctrl+a
+computer volume up: press XF86AudioRaiseVolume
+computer volume down: press XF86AudioLowerVolume
+computer mute: press XF86AudioMute

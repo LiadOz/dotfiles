@@ -1,0 +1,15 @@
+[Unit]
+Description=Local whole-machine voice commands with Numen
+After=graphical-session.target voice-echo-cancel.service
+Requires=voice-echo-cancel.service
+Wants=numen-handy-watch.service
+
+[Service]
+Environment=PULSE_SOURCE=voice_control_source
+ExecStart=%h/.local/bin/numen --mic=pulse %h/.config/numen/phrases/commands.phrases
+Restart=always
+RestartSec=2
+TimeoutStopSec=5
+
+[Install]
+WantedBy=default.target

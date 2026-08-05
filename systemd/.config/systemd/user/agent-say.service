@@ -1,6 +1,7 @@
 [Unit]
 Description=Read out what agents have asked to say
-After=kokoro-tts.service
+After=kokoro-tts.service voice-echo-cancel.service
+Wants=voice-echo-cancel.service
 
 [Service]
 ExecStart=%h/.local/bin/agent-say-daemon

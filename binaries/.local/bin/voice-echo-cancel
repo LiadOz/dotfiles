@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Own the PipeWire-Pulse WebRTC echo-cancel path used by Numen and narration.
+set -euo pipefail
+
+RUNTIME=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+STATE=$RUNTIME/voice-echo-cancel.module
+SOURCE_NAME=${VOICE_CONTROL_SOURCE:-voice_control_source}
+SINK_NAME=${VOICE_CONTROL_SINK:-voice_control_sink}
+
+module_exists() {
+  pactl list short modules 2>/dev/null | awk -v id="$1" '$1 == id { found=1 } END { exit !found }'
+}
+
+find_module() {
+  pactl list modules 2>/dev/null | awk -v source="$SOURCE_NAME" '
+    function emit() { if (is_echo && ours) print id }
+    /^Module #[0-9]+$/ {
+      emit()
+      id=$2
+      sub(/^#/, "", id)
+      is_echo=ours=0
+      next
+    }
+    /^[[:space:]]*Name: module-echo-cancel$/ { is_echo=1 }
+    /^[[:space:]]*Argument:/ && index($0, "source_name=" source) { ours=1 }
+    END { emit() }
+  ' | head -1
+}
+
+remember() {
+  mkdir -p "$RUNTIME"
+  printf '%s\n' "$1" > "$STATE.part.$$"
+  mv "$STATE.part.$$" "$STATE"
+}
+
+case ${1:-} in
+  start)
+    module=
+    [ ! -r "$STATE" ] || module=$(cat "$STATE")
+    if [ -n "$module" ] && module_exists "$module"; then
+      exit 0
+    fi
+    module=$(find_module)
+    if [ -n "$module" ]; then
+      remember "$module"
+      exit 0
+    fi
+
+    source_master=${VOICE_CONTROL_SOURCE_MASTER:-$(pactl get-default-source)}
+    sink_master=${VOICE_CONTROL_SINK_MASTER:-$(pactl get-default-sink)}
+    case $source_master:$sink_master in
+      "$SOURCE_NAME":*|*:"$SINK_NAME")
+        echo "voice-echo-cancel: a virtual endpoint cannot be its own master" >&2
+        exit 1
+        ;;
+    esac
+
+    module=$(pactl load-module module-echo-cancel \
+      source_name="$SOURCE_NAME" sink_name="$SINK_NAME" \
+      source_master="$source_master" sink_master="$sink_master" \
+      aec_method=webrtc rate=48000 channels=1 channel_map=mono)
+    remember "$module"
+    ;;
+  stop)
+    module=
+    [ ! -r "$STATE" ] || module=$(cat "$STATE")
+    [ -n "$module" ] || module=$(find_module)
+    if [ -n "$module" ] && module_exists "$module"; then
+      pactl unload-module "$module"
+    fi
+    rm -f "$STATE"
+    ;;
+  *)
+    echo "usage: voice-echo-cancel start|stop" >&2
+    exit 2
+    ;;
+esac

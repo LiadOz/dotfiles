@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Keep Numen out of the way whenever Handy is started by any route, including
+# Handy's existing keyboard shortcut rather than a Numen voice command.
+set -u
+
+CONTROL=${NUMEN_CONTROL:-$HOME/.local/bin/numen-control}
+mode=
+
+handy_listening() {
+  pactl list source-outputs 2>/dev/null |
+    awk 'index($0, "application.name = \"PipeWire ALSA [handy]\"") { found=1 }
+         END { exit !found }'
+}
+
+sync_mode() {
+  local wanted
+  if handy_listening; then
+    wanted=handy
+  else
+    wanted=normal
+  fi
+  [ "$wanted" = "$mode" ] && return 0
+  if "$CONTROL" "$wanted"; then
+    mode=$wanted
+    return 0
+  fi
+  return 1
+}
+
+# Numen's pipe appears only after its model has loaded. Failed early attempts
+# are harmless; source-output events and the service restart policy retry.
+until sync_mode; do sleep 0.2; done
+pactl subscribe 2>/dev/null | while IFS= read -r event; do
+  case $event in
+    *source-output*) until sync_mode; do sleep 0.2; done ;;
+  esac
+done

@@ -23,6 +23,7 @@ voice_for() {  # $1 session -> a voice that will not change under it
 STATE=${XDG_STATE_HOME:-$HOME/.local/state}/agent-say
 SPOOL=$STATE/spool
 LEVEL_FILE=${XDG_CONFIG_HOME:-$HOME/.config}/agent-say/level
+PLAYBACK_SINK=${AGENT_SAY_SINK:-voice_control_sink}
 
 rank() {
   case $1 in
@@ -31,9 +32,53 @@ rank() {
   esac
 }
 
-# A recording stream on the mic means handy is listening, or you are on a
-# call; either way, do not talk over you.
-mic_busy() { [ -n "$(pactl list short source-outputs 2>/dev/null)" ]; }
+# A recording stream on the mic normally means Handy is listening, or you are
+# on a call; either way, do not talk over you. Numen is the exception: it owns
+# an arecord stream permanently so it can hear spoken commands, including the
+# command that interrupts this narrator.
+numen_capture() {  # $1 source-output process ID
+  local pid=$1 command parent hops=0
+  while [[ $pid =~ ^[0-9]+$ ]] && [ "$pid" -gt 1 ] && [ "$hops" -lt 8 ]; do
+    command=$(cat "/proc/$pid/comm" 2>/dev/null || true)
+    [ "$command" = numen ] && return 0
+    parent=$(awk '/^PPid:/ {print $2}' "/proc/$pid/status" 2>/dev/null)
+    [ -n "$parent" ] || break
+    pid=$parent
+    hops=$((hops + 1))
+  done
+  return 1
+}
+
+mic_busy() {
+  local output clients total internal ignored=0 client pid
+  output=$(pactl list source-outputs 2>/dev/null)
+  clients=$(pactl list clients 2>/dev/null)
+  total=$(grep -c '^Source Output #' <<<"$output")
+  internal=$(grep -c 'node.name = "echo-cancel-capture"' <<<"$output")
+  while read -r client; do
+    [ -n "$client" ] || continue
+    pid=$(awk -v target="Client #$client" '
+      $0 == target { inside=1; next }
+      inside && /^Client #[0-9]+$/ { exit }
+      inside && /pipewire.sec.pid =/ {
+        fallback=$0
+        gsub(/[^0-9]/, "", fallback)
+      }
+      inside && /application.process.id =/ {
+        pid=$0
+        gsub(/[^0-9]/, "", pid)
+        print pid
+        found=1
+        exit
+      }
+      END { if (!found && fallback != "") print fallback }
+    ' <<<"$clients")
+    numen_capture "$pid" || return 0
+    ignored=$((ignored + 1))
+  done < <(printf '%s\n' "$output" |
+    sed -n 's/^[[:space:]]*Client: \([0-9][0-9]*\)$/\1/p')
+  [ "$ignored" -lt $((total - internal)) ]
+}
 
 wait_for_mic() {
   for _ in $(seq 90); do
@@ -66,15 +111,30 @@ synth() {  # $1 text, $2 file, $3 voice
     "$PY" -c "$LEVELLER" > "$2"
 }
 
-# Play one sentence. Fails if you started talking part way through it.
-play() {
-  paplay --raw --format=s16le --rate=24000 --channels=1 "$1" &
-  local job=$! cut=0
+# A changing token is an explicit request to stop the sentence in progress.
+stop_id() { cat "$STATE/stop" 2>/dev/null || echo 0; }
+
+# Play one sentence. Returns 1 if you started talking part way through it, or
+# 2 for an explicit stop request.
+play() {  # $1 audio, $2 stop token captured when this note began
+  local -a device=()
+  if pactl list short sinks 2>/dev/null |
+      awk -v sink="$PLAYBACK_SINK" '$2 == sink { found=1 } END { exit !found }'; then
+    device=(--device="$PLAYBACK_SINK")
+  fi
+  paplay "${device[@]}" --raw --format=s16le --rate=24000 --channels=1 "$1" &
+  local job=$! cut=0 stopped=0
   while kill -0 "$job" 2>/dev/null; do
+    if [ "$(stop_id)" != "$2" ]; then
+      kill "$job" 2>/dev/null
+      stopped=1
+      break
+    fi
     mic_busy && kill "$job" 2>/dev/null && cut=1 && break
     sleep 0.2
   done
   wait "$job" 2>/dev/null
+  [ "$stopped" -eq 0 ] || return 2
   return $cut
 }
 
@@ -222,7 +282,8 @@ next_resume() {
 say() {  # $1 text, $2 voice
   local -a parts
   mapfile -t parts < <(sed 's/\([.!?]\)  */\1\n/g' <<<"$1")
-  local cut_at current next synth_job= i=0
+  local cut_at current next status stop_at synth_job= i=0
+  stop_at=$(stop_id)
   synth "${parts[0]}" "$WAV.0" "$2"
   while [ "$i" -lt "${#parts[@]}" ]; do
     wait_for_mic || return 0
@@ -233,10 +294,19 @@ say() {  # $1 text, $2 voice
       synth "${parts[i + 1]}" "$next" "$2" &
       synth_job=$!
     fi
-    if play "$current"; then
+    play "$current" "$stop_at"
+    status=$?
+    if [ "$status" -eq 0 ]; then
       [ -z "$synth_job" ] || wait "$synth_job"
       i=$((i + 1))
       continue
+    fi
+    if [ "$status" -eq 2 ]; then
+      if [ -n "$synth_job" ]; then
+        kill "$synth_job" 2>/dev/null || true
+        wait "$synth_job" 2>/dev/null || true
+      fi
+      return 0
     fi
     [ -z "$synth_job" ] || wait "$synth_job"
     # A quick cut-in gets an acknowledgement. After a longer interruption,
@@ -247,7 +317,9 @@ say() {  # $1 text, $2 voice
     if [ $((SECONDS - cut_at)) -lt 20 ]; then
       next_resume
       synth "$resume_phrase" "$WAV.resume" "$2"
-      play "$WAV.resume"
+      play "$WAV.resume" "$stop_at"
+      status=$?
+      [ "$status" -ne 2 ] || return 0
     fi
   done
 }

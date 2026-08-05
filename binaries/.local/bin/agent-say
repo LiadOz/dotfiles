@@ -6,6 +6,7 @@
 #   agent-say hook claude|codex        # from a hook, payload on stdin
 #   agent-say level updates            # how much you want to hear, right now
 #   agent-say level                    # what it is set to
+#   agent-say stop                     # interrupt the sentence being spoken
 #
 # This only writes a note to a spool directory and returns; agent-say-daemon
 # is the one thing that ever plays audio. So an agent never waits on a
@@ -104,6 +105,11 @@ case ${1:-} in
       printf '%s\n' "$2" > "$LEVEL_FILE"
     fi
     level
+    ;;
+  stop)
+    mkdir -p "$STATE"
+    printf '%s.%s\n' "$(date +%s%N)" "$$" > "$STATE/stop.part.$$"
+    mv "$STATE/stop.part.$$" "$STATE/stop"
     ;;
   -l)
     spool "$2" "${*:3}" "$SESSION" "$(title "$SESSION")"

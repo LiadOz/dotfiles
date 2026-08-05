@@ -21,7 +21,7 @@ chmod u+x binaries/.local/bin/*
 # one with a symlink into this repo. That is what lets ~/.local/bin and
 # ~/.codex stay yours, holding machine-specific links alongside the ones
 # this repo provides, on every machine.
-for PKG in binaries gdb nvim tmux zsh colordiff task agents systemd; do
+for PKG in binaries gdb nvim tmux zsh colordiff task agents numen systemd; do
   if stow --no-folding "$PKG" 2>/tmp/stow-$PKG.err; then
     echo "stow: $PKG"
   else
@@ -124,3 +124,10 @@ if [ -d "$HOME/.local/share/kokoro-fastapi" ]; then
   loginctl enable-linger "$USER" &>/dev/null
 fi
 
+# Numen itself is installed user-locally because Ubuntu does not package it.
+# Once its runtime is present, keep whole-machine voice commands available.
+if [ -x "$HOME/.local/libexec/numen/numen" ]; then
+  systemctl --user daemon-reload
+  systemctl --user enable --now voice-echo-cancel.service numen.service &>/dev/null &&
+    echo "voice echo cancellation, numen: enabled"
+fi

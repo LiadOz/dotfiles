@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Run the user-local Numen build with its bundled Vosk and X11 dependencies.
+set -euo pipefail
+
+RUNTIME=${NUMEN_RUNTIME_DIR:-$HOME/.local/libexec/numen}
+export PATH="$RUNTIME:$HOME/.local/bin:${PATH:-/usr/bin:/bin}"
+export LD_LIBRARY_PATH="$RUNTIME${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export NUMEN_MODEL=${NUMEN_MODEL:-$HOME/.local/share/numen/models/small-en-us}
+
+exec "$RUNTIME/numen" --x11 "$@"

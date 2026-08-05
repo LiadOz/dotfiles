@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Switch between general voice control and Handy's free-form dictation mode.
+set -euo pipefail
+
+CONFIG=${NUMEN_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/numen}
+NUMENC=${NUMENC:-$HOME/.local/bin/numenc}
+HANDY=${HANDY:-/usr/bin/handy}
+STATE=${XDG_STATE_HOME:-$HOME/.local/state}/numen
+
+normal_files=(
+  "$CONFIG/phrases/commands.phrases"
+)
+
+load() {
+  printf 'load'
+  printf ' %s' "$@"
+  printf '\n'
+}
+
+load_normal() {
+  load "${normal_files[@]}" | "$NUMENC"
+  remember normal
+}
+
+load_handy() {
+  load "$CONFIG/phrases/handy.phrases" | "$NUMENC"
+  remember handy
+}
+
+remember() {
+  mkdir -p "$STATE"
+  printf '%s\n' "$1" > "$STATE/mode.part.$$"
+  mv "$STATE/mode.part.$$" "$STATE/mode"
+}
+
+handy_listening() {
+  pactl list source-outputs 2>/dev/null |
+    awk 'index($0, "application.name = \"PipeWire ALSA [handy]\"") { found=1 }
+         END { exit !found }'
+}
+
+case ${1:-} in
+  normal)
+    load_normal
+    ;;
+  handy)
+    load_handy
+    ;;
+  dictate)
+    # Restrict Numen before opening Handy so ordinary command words become
+    # dictation. Numen processes this queued load as soon as this action exits.
+    load_handy
+    handy_listening || "$HANDY" --toggle-transcription
+    ;;
+  finish)
+    # Handy keeps the focus and performs its configured paste/auto-submit.
+    handy_listening && "$HANDY" --toggle-transcription
+    load_normal
+    ;;
+  cancel)
+    "$HANDY" --cancel >/dev/null 2>&1 || true
+    load_normal
+    ;;
+  *)
+    echo "usage: numen-control normal|handy|dictate|finish|cancel" >&2
+    exit 2
+    ;;
+esac

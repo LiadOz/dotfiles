@@ -1,0 +1,10 @@
+[Unit]
+Description=Restrict Numen automatically while Handy is recording
+After=numen.service
+Requires=numen.service
+PartOf=numen.service
+
+[Service]
+ExecStart=%h/.local/bin/numen-handy-watch
+Restart=always
+RestartSec=1
