@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-# Send actions to the user-local Numen instance.
-set -euo pipefail
-
-RUNTIME=${NUMEN_RUNTIME_DIR:-$HOME/.local/libexec/numen}
-exec "$RUNTIME/numenc" "$@"

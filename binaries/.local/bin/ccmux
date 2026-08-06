@@ -1,4 +1,0 @@
-#!/bin/sh
-PATH="$HOME/.local/share/bun/bin:$PATH"
-export PATH
-exec "$HOME/.local/share/ccmux/bin/ccmux" "$@"

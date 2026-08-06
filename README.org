@@ -3,14 +3,15 @@
 
 * Purpose
 
-This repository contains authored shell, editor, tmux, task, agent, and Linux
-voice configuration. It is a source repository, not a live extension of the
-home directory.
+This repository contains personal shell, editor, tmux, task, and global agent
+preferences. It is a source repository, not a live extension of the home
+directory. Executable AI tooling and voice services live in the separate
+=ai_stuff= umbrella repository.
 
 Deployment is owned by:
 
 #+begin_example
-~/projects/ai_stuff/workstation-config
+~/projects/ai_stuff
 #+end_example
 
 The Ansible playbook copies only Git-tracked, named files into real directories
@@ -21,7 +22,7 @@ filesystem, remain intact.
 
 * Installation
 
-From the workstation-config directory, first inspect the selected profile:
+From the =ai_stuff= directory, first inspect the selected profile:
 
 #+begin_src sh
 ./bootstrap --profile primary-linux --check --diff
@@ -38,19 +39,17 @@ Other maintained profiles are =remote-worker= for TLV/farm machines and =mac=
 for macOS. The remote profile never starts the speaker, Kokoro, Numen, or audio
 services.
 
-=./install.sh= is a compatibility entry point that delegates to the same
-bootstrap. Set =WORKSTATION_CONFIG_ROOT= only if the orchestration checkout is
-not at its default path.
-
 * Repository boundaries
 
-- Personal configuration and voice command launchers live here.
-- The custom tmux plugin owns =agent-state=, =agent-pick=, and the selector UI;
-  its source lives in =ai_stuff/tmux-agent-status= and Ansible installs its
-  commands.
-- The ccmux fork/patches live in =ai_stuff/ccmux=.
-- Packages, host policy, service activation, and migration logic live in
-  =ai_stuff/workstation-config=.
+- Personal configuration and global =CLAUDE.md=/=AGENTS.md= preferences live
+  here.
+- Voice scripts, service units, phrase definitions, and the talk skill live in
+  =ai_stuff/agent-voice=.
+- The tmux agent extension owns =agent-state=, =agent-pick=, its small tmux
+  include, and the selector UI in =ai_stuff/tmux-agent-status=.
+- The ccmux source and launcher live in =ai_stuff/ccmux=.
+- Packages, host policy, service activation, and migration logic live in the
+  =ai_stuff/workstation-config= project.
 - Downloaded programs, Python environments, models, recordings, caches,
   secrets, and runtime state never live here.
 

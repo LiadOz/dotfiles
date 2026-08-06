@@ -1,1 +1,0 @@
-../../../.agents/skills/talk/SKILL.md

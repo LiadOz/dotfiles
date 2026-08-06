@@ -1,7 +1,0 @@
-# While Handy is recording, Numen recognizes only these controls. Hissing or
-# shushing is unambiguous because it cannot accidentally become dictated text.
-<hiss-begin>: run numen-control finish
-<shush-begin>: run numen-control finish
-finish: run numen-control finish
-finish dictation: run numen-control finish
-cancel dictation: run numen-control cancel

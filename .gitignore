@@ -2,17 +2,5 @@
 # Anchored so it does not match the stow package at agents/.claude/.
 /.claude/
 
-# Machine-specific tool symlinks in ~/.local/bin. They point at absolute,
-# version-pinned paths that exist on one machine and dangle on every other,
-# and stow 2.4 refuses absolute symlinks as sources -- which aborted the
-# whole install on tlv. Kept on disk per machine, out of the repo.
-/binaries/.local/bin/claude
-/binaries/.local/bin/ipython
-/binaries/.local/bin/ipython3
-/binaries/.local/bin/kitten
-/binaries/.local/bin/kitty
-/binaries/.local/bin/nvim
-/binaries/.local/bin/pylsp
-
 # Taskwarrior secrets and per-machine settings (see the include in taskrc).
 /task/.config/task/taskrc.local
