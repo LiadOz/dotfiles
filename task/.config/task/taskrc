@@ -31,4 +31,4 @@ report.in.labels            = ID,Description
 # tracked and the repo is public, so a routine `git add -A` would publish
 # them. install.sh creates the file if it is missing; taskwarrior errors on
 # an include it cannot read.
-include /home/loz/.config/task/taskrc.local
+include ~/.config/task/taskrc.local

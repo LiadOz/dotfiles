@@ -1,56 +1,63 @@
-#+TITLE: DotFiles Config
-#+DESCRIPTION: Configuration files for linux and WSL environment
- 
-* Installation
-- update apt.
-- install yadm
-- clone this repository with yadm
-- open vim and type ":PlugInstall"
-- install python3-pip
-- with pip3 install pyvim
-- for c++ syntax instally clang
-- install [[https://github.com/politza/pdf-tools#server-prerequisites][these packages]] for pdf-tools
-* Some Notes
-** Computer specific settings
-- create DROPBOX_DIR environment variable 
-** Dependicies
-   - setuptools package for python
-   - texlive-latex-extra and python-pygments for literate programming
-* Other Packages Used
-** Shell
-   zsh and oh-my-zsh after installation add plugins git, fzf, tmux, vi-mode
-   and source .zsh\under{}defaults.sh.
-** other...
-   - gdb
-   - fzf
-* WSL Troubleshooting
-** wsltty Config
-   confing file should be place in:
-   username/AppData/Roaming/wsltty/config
+#+TITLE: Dotfiles source
+#+DESCRIPTION: Portable source files deployed by workstation-config
 
-** Allowing Windows Fonts
-   follow [[https://x410.dev/cookbook/wsl/sharing-windows-fonts-with-wsl/][this]]
-   make sure you find the exact place the font is saved at.
-   fonts should be in ttf format.
-** Allow Emacs Links
-   follow this [[https://www.reddit.com/r/bashonubuntuonwindows/comments/70i8aa/making_emacs_on_wsl_open_links_in_windows_web/][comment]]
-** Change Distribution
-   to see distribution list 
-   #+BEGIN_SRC cmd
-   wsl -l
-   #+END_SRC
-   to switch default distribution 
-   #+BEGIN_SRC cmd
-   wsl -s <distribution>
-   #+END_SRC
-** Packages not installing (signature failure)
-   You need to temporarly set package-check-signature variable to nil then 
-   install gnu-elpa-keyring-update.
-   Even better try this:
-   #+BEGIN_SRC sh
-   gpg --keyserver hkp://keyserver.ubuntu.com:80 --homedir ~/.emacs.d/elpa/gnupg --receive-keys 066DAFCB81E42C40
-   #+END_SRC
-   
-* Emacs dependencies
-- yapf
-- jedi for completion
+* Purpose
+
+This repository contains authored shell, editor, tmux, task, agent, and Linux
+voice configuration. It is a source repository, not a live extension of the
+home directory.
+
+Deployment is owned by:
+
+#+begin_example
+~/projects/ai_stuff/workstation-config
+#+end_example
+
+The Ansible playbook copies only Git-tracked, named files into real directories
+under =$HOME=. It does not replace =~/.local/bin=, =~/.config=, =~/.codex=, or
+other machine-owned directories with links into this checkout. Existing
+machine redirects, such as a scratch-backed =~/.codex= on a small home
+filesystem, remain intact.
+
+* Installation
+
+From the workstation-config directory, first inspect the selected profile:
+
+#+begin_src sh
+./bootstrap --profile primary-linux --check --diff
+#+end_src
+
+Then apply and verify idempotence:
+
+#+begin_src sh
+./bootstrap --profile primary-linux
+./bootstrap --profile primary-linux --check --diff
+#+end_src
+
+Other maintained profiles are =remote-worker= for TLV/farm machines and =mac=
+for macOS. The remote profile never starts the speaker, Kokoro, Numen, or audio
+services.
+
+=./install.sh= is a compatibility entry point that delegates to the same
+bootstrap. Set =WORKSTATION_CONFIG_ROOT= only if the orchestration checkout is
+not at its default path.
+
+* Repository boundaries
+
+- Personal configuration and thin command launchers live here.
+- The custom tmux plugin lives in =ai_stuff/tmux-agent-status=.
+- The ccmux fork/patches live in =ai_stuff/ccmux=.
+- Packages, host policy, service activation, and migration logic live in
+  =ai_stuff/workstation-config=.
+- Downloaded programs, Python environments, models, recordings, caches,
+  secrets, and runtime state never live here.
+
+* Machine-specific state
+
+Taskwarrior reads =~/.config/task/taskrc.local=. Ansible creates it with mode
+=0600=, but never puts its contents in Git. Other secrets belong in Ansible
+Vault, an ignored host variables file, or the machine's secret manager.
+
+The Neovim directory is a pinned Git submodule. Deployment uses its recorded
+commit and copies tracked files; it does not merge the submodule's remote
+branch during installation.
