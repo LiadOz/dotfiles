@@ -42,7 +42,15 @@ if command -v task &> /dev/null && [ -f "$HOME/.config/task/taskrc" ]; then
     }
 
     wsun () {
-        task "$1" modify wait:$(date -d 'next sunday' +%F)
+        if next_sunday=$(date -d 'next sunday' +%F 2>/dev/null); then
+            :
+        elif next_sunday=$(date -v+sunday +%F 2>/dev/null); then
+            :
+        else
+            echo "Could not calculate next Sunday with this date command."
+            return 1
+        fi
+        task "$1" modify wait:"$next_sunday"
     }
 
     wday () {
