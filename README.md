@@ -26,9 +26,9 @@ run has nothing left to change:
 ./bootstrap --profile primary-linux --check --diff
 ```
 
-Use `remote-worker` on TLV, farm, or build machines and `mac` on macOS. To keep
-the selection locally, put just the profile name in `.workstation-profile`;
-that file is ignored by Git.
+Use `remote-worker` on remote or build machines and `mac` on macOS. To keep the
+selection locally, put just the profile name in `.workstation-profile`; that
+file is ignored by Git.
 
 Audio capabilities require an additional ignored `.workstation-local.yml`
 safety gate. For example:
