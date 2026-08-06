@@ -1,2 +1,0 @@
-#!/bin/sh
-exec "$HOME/.tmux/plugins/tmux-agent-status/agent-pick" "$@"

@@ -44,8 +44,10 @@ not at its default path.
 
 * Repository boundaries
 
-- Personal configuration and thin command launchers live here.
-- The custom tmux plugin lives in =ai_stuff/tmux-agent-status=.
+- Personal configuration and voice command launchers live here.
+- The custom tmux plugin owns =agent-state=, =agent-pick=, and the selector UI;
+  its source lives in =ai_stuff/tmux-agent-status= and Ansible installs its
+  commands.
 - The ccmux fork/patches live in =ai_stuff/ccmux=.
 - Packages, host policy, service activation, and migration logic live in
   =ai_stuff/workstation-config=.
