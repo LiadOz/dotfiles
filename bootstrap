@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+dotfiles_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+toolkit_url=https://github.com/LiadOz/agent-toolkit.git
+managed_root=${XDG_DATA_HOME:-$HOME/.local/share}/agent-toolkit
+toolkit_root=${AGENT_TOOLKIT_ROOT:-}
+managed=false
+
+if [[ -z $toolkit_root ]]; then
+  for candidate in "$HOME/projects/agent-toolkit" "$managed_root"; do
+    if [[ -x $candidate/bootstrap ]]; then
+      toolkit_root=$candidate
+      break
+    fi
+  done
+fi
+
+if [[ -z $toolkit_root ]]; then
+  toolkit_root=$managed_root
+  mkdir -p "$(dirname -- "$toolkit_root")"
+  git clone "$toolkit_url" "$toolkit_root"
+  managed=true
+elif [[ $toolkit_root == "$managed_root" ]]; then
+  managed=true
+elif [[ ! -d $toolkit_root ]]; then
+  mkdir -p "$(dirname -- "$toolkit_root")"
+  git clone "$toolkit_url" "$toolkit_root"
+  managed=true
+fi
+
+if [[ ! -x $toolkit_root/bootstrap ]]; then
+  printf 'Provisioning bootstrap not found: %s\n' "$toolkit_root/bootstrap" >&2
+  exit 1
+fi
+
+# The automatically managed copy follows main by fast-forward only. An
+# explicitly selected or development checkout is never fetched or switched.
+if $managed && [[ -d $toolkit_root/.git ]]; then
+  if [[ -n $(git -C "$toolkit_root" status --porcelain) ]]; then
+    printf 'Managed provisioning checkout has local changes: %s\n' \
+      "$toolkit_root" >&2
+    exit 1
+  fi
+  git -C "$toolkit_root" fetch --quiet origin main
+  git -C "$toolkit_root" merge --quiet --ff-only origin/main
+fi
+
+delegate_args=(--dotfiles-repo "$dotfiles_root")
+profile_selected=false
+for argument in "$@"; do
+  case $argument in
+    --profile|--profile=*) profile_selected=true ;;
+  esac
+done
+if ! $profile_selected && [[ -f $dotfiles_root/.workstation-profile ]]; then
+  IFS= read -r profile < "$dotfiles_root/.workstation-profile"
+  delegate_args+=(--profile "$profile")
+fi
+if [[ -f $dotfiles_root/.workstation-local.yml ]]; then
+  delegate_args+=(--local-vars "$dotfiles_root/.workstation-local.yml")
+fi
+
+exec "$toolkit_root/bootstrap" "${delegate_args[@]}" "$@"

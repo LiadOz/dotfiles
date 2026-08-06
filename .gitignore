@@ -4,3 +4,7 @@
 
 # Taskwarrior secrets and per-machine settings (see the include in taskrc).
 /task/.config/task/taskrc.local
+
+# Host-local installation choices and audio safety gates.
+/.workstation-profile
+/.workstation-local.yml
