@@ -28,12 +28,13 @@ set -u
 
 STATE=${XDG_STATE_HOME:-$HOME/.local/state}/agent-say
 LEVEL_FILE=${XDG_CONFIG_HOME:-$HOME/.config}/agent-say/level
-SESSION=${CLAUDE_CODE_SESSION_ID:-$$}
+SESSION=${CODEX_THREAD_ID:-${CLAUDE_CODE_SESSION_ID:-$$}}
 
 level() { cat "$LEVEL_FILE" 2>/dev/null || echo updates; }
 
-# Carries who is speaking as well as what: the daemon reads the name out and
-# gives each session its own voice, so several agents stay tellable apart.
+# Carries who is speaking as well as what: the daemon reads the name when the
+# speaker changes and gives each session its own voice, so several agents stay
+# tellable apart without repeating one agent's name on consecutive updates.
 # The host is for once this is running on the farm too.
 spool() {  # $1 level, $2 text, $3 session, $4 name
   [ -n "${2// /}" ] || return 0
@@ -50,8 +51,14 @@ spool() {  # $1 level, $2 text, $3 session, $4 name
 # agent-state records it per tmux window, keyed by the session that claimed
 # the window.
 title() {
-  jq -r --arg o "$1" 'select(.owner == $o) | .title // empty' \
-    "$HOME/.local/state/agent-slots"/*.json 2>/dev/null | head -1
+  local name
+  name=$(jq -r '.title // empty' \
+    "$HOME/.local/state/tmux-agent-status/sessions/$1.json" 2>/dev/null)
+  if [ -z "$name" ]; then
+    name=$(jq -r --arg o "$1" 'select(.owner == $o) | .title // empty' \
+      "$HOME/.local/state/agent-slots"/*.json 2>/dev/null | head -1)
+  fi
+  printf '%s\n' "$name"
 }
 
 # The agent's closing message, for reading back at `narrate`. codex hands it

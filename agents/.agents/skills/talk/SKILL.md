@@ -16,7 +16,8 @@ agent-say level              # what it is set to now
 
 Speech is queued across every agent on the machine, so you will never talk
 over another session, and it stops the moment the user opens their
-microphone.
+microphone. The session name is spoken when the speaker changes, then omitted
+from consecutive utterances by that same agent.
 
 ## How much to say
 

@@ -372,6 +372,8 @@ trap 'rm -rf "$WAV_DIR"' EXIT
 mkdir -p "$SPOOL"
 [ -n "$HOSTS" ] && fetch &
 
+last_session=
+have_last_session=0
 while :; do
   # Oldest first: the filenames are nanosecond timestamps.
   note=$(find "$SPOOL" -maxdepth 1 -name '*.json' -printf '%f\n' 2>/dev/null | sort | head -1)
@@ -393,7 +395,14 @@ while :; do
   # could not reach us, are stale on arrival. Better quiet than yesterday's
   # news. The filename is when it was written, which survives being copied.
   [ "${note%%.*}" -gt $(( ($(date +%s) - 300) * 1000000000 )) ] || continue
-  # Say who it is. The voice tells you at once; the name tells you which
-  # piece of work, which the voice cannot.
-  say "${name:+$name. }$text" "$(voice_for "$session")"
+  # The voice tells you at once that someone is speaking. Name the piece of
+  # work when the speaker changes, but do not repeat it through a run of
+  # consecutive updates from the same agent.
+  spoken_name=
+  if [ "$have_last_session" -eq 0 ] || [ "$session" != "$last_session" ]; then
+    spoken_name=$name
+  fi
+  say "${spoken_name:+$spoken_name. }$text" "$(voice_for "$session")"
+  last_session=$session
+  have_last_session=1
 done
