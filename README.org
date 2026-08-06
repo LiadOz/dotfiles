@@ -6,12 +6,12 @@
 This repository contains personal shell, editor, tmux, task, and global agent
 preferences. It is a source repository, not a live extension of the home
 directory. Executable AI tooling and voice services live in the separate
-=ai_stuff= umbrella repository.
+=agent-toolkit= umbrella repository.
 
 Deployment is owned by:
 
 #+begin_example
-~/projects/ai_stuff
+~/projects/agent-toolkit
 #+end_example
 
 The Ansible playbook copies only Git-tracked, named files into real directories
@@ -22,7 +22,7 @@ filesystem, remain intact.
 
 * Installation
 
-From the =ai_stuff= directory, first inspect the selected profile:
+From the =agent-toolkit= directory, first inspect the selected profile:
 
 #+begin_src sh
 ./bootstrap --profile primary-linux --check --diff
@@ -44,12 +44,12 @@ services.
 - Personal configuration and global =CLAUDE.md=/=AGENTS.md= preferences live
   here.
 - Voice scripts, service units, phrase definitions, and the talk skill live in
-  =ai_stuff/agent-voice=.
+  =agent-toolkit/agent-voice=.
 - The tmux agent extension owns =agent-state=, =agent-pick=, its small tmux
-  include, and the selector UI in =ai_stuff/tmux-agent-status=.
-- The ccmux source and launcher live in =ai_stuff/ccmux=.
+  include, and the selector UI in =agent-toolkit/tmux-agent-status=.
+- The ccmux source and launcher live in =agent-toolkit/ccmux=.
 - Packages, host policy, service activation, and migration logic live in the
-  =ai_stuff/workstation-config= project.
+  =agent-toolkit/workstation-config= project.
 - Downloaded programs, Python environments, models, recordings, caches,
   secrets, and runtime state never live here.
 
