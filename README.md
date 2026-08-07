@@ -1,8 +1,9 @@
 # Dotfiles
 
-Personal shell, editor, tmux, Taskwarrior, and global agent preferences. The
-bootstrap deploys tracked files into real directories and preserves unrelated
-machine files and intentional redirects such as a scratch-backed `~/.codex`.
+Personal shell, editor, tmux, and Taskwarrior configuration. Shared agent
+instructions and skills live in Agent Toolkit. The bootstrap deploys both
+repositories into real directories and preserves unrelated machine files and
+intentional redirects such as a scratch-backed `~/.codex`.
 
 ## Prerequisites
 
