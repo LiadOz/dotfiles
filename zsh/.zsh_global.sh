@@ -9,8 +9,10 @@ echo " ╚═════╝ ╚══════╝ ╚═════╝ ╚�
 
 PATH="$HOME/.local/bin:$PATH"
 
-# GTD stuff (taskwarrior)
-if command -v task &> /dev/null && [ -f "$HOME/.config/task/taskrc" ]; then
+# GTD stuff (Taskwarrior 3.x)
+if command -v task &> /dev/null \
+        && [[ "$(task --version 2>/dev/null)" == 3.* ]] \
+        && [ -f "$HOME/.config/task/taskrc" ]; then
     alias in='task add +in'
     PS1='$(c=$(task +in +PENDING count 2>/dev/null); [ "$c" -gt 0 ] && printf "%s " "$c")'"$PS1"
     typeset +x PS1
@@ -56,6 +58,15 @@ if command -v task &> /dev/null && [ -f "$HOME/.config/task/taskrc" ]; then
 
     wday () {
         task "$1" modify wait:"+${2}d"
+    }
+
+    twait () {
+        if [ -z "$1" ]; then
+            echo "Usage: twait <task-id> [when]"
+            return 1
+        fi
+
+        task "$1" modify wait:"${2:-+2d}"
     }
 
     rnext () {
