@@ -12,7 +12,8 @@ PATH="$HOME/.local/bin:$PATH"
 # GTD stuff (taskwarrior)
 if command -v task &> /dev/null && [ -f "$HOME/.config/task/taskrc" ]; then
     alias in='task add +in'
-    export PS1='$(c=$(task +in +PENDING count 2>/dev/null); [ "$c" -gt 0 ] && printf "%s " "$c")'"$PS1"
+    PS1='$(c=$(task +in +PENDING count 2>/dev/null); [ "$c" -gt 0 ] && printf "%s " "$c")'"$PS1"
+    typeset +x PS1
     tickle () {
         deadline=$1
         shift
