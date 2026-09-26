@@ -77,3 +77,19 @@ if command -v task &> /dev/null \
         task "$1" modify -review +notify
     }
 fi
+
+# Pi runs inside a Docker sandbox, where tmux-agent-status cannot see it, so
+# launches go through agent-run, which labels the tmux pane as a Pi pane
+# while pi-sbx runs. Maintenance subcommands and flags run as is.
+pi-sbx () {
+    case "${1:-}" in
+        doctor|-*) command pi-sbx "$@" ;;
+        *)
+            if [ -n "${TMUX:-}" ] && command -v agent-run >/dev/null 2>&1; then
+                agent-run --label pi -- pi-sbx "$@"
+            else
+                command pi-sbx "$@"
+            fi
+            ;;
+    esac
+}
