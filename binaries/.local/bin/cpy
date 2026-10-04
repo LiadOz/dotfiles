@@ -1,0 +1,10 @@
+#!/bin/sh
+# Copy stdin to the desktop clipboard, from this machine or any machine you
+# reach through SSH and tmux, LSF hosts included; no set_display needed.
+if { [ -n "$TMUX" ] && tmux display-message -p '' >/dev/null 2>&1; } ||
+    [ -n "$DISPLAY" ]; then
+  exec "$HOME/.local/bin/tmux-clip"
+fi
+# No tmux or display here (for example on an LSF host): ask the tmux this
+# terminal goes through, with OSC 52.
+printf '\033]52;c;%s\a' "$(base64 | tr -d '\n')" >/dev/tty

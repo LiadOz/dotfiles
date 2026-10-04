@@ -1,0 +1,17 @@
+#!/bin/sh
+# Copy stdin to the desktop clipboard with xclip, through the X display of
+# the tmux session (forwarded by SSH), so it works from panes whose own
+# DISPLAY is stale or unset. tmux runs it for its own copies (copy-command)
+# and when a program sets the clipboard with OSC 52 (the pane-set-clipboard
+# hook); cpy uses it too.
+display=$(tmux show-environment DISPLAY 2>/dev/null | sed -n 's/^DISPLAY=//p')
+[ -n "$display" ] ||
+  display=$(tmux show-environment -g DISPLAY 2>/dev/null | sed -n 's/^DISPLAY=//p')
+DISPLAY=${display:-$DISPLAY}
+if [ -z "$DISPLAY" ]; then
+  echo 'tmux-clip: no X display to copy to' >&2
+  exit 1
+fi
+export DISPLAY
+# xclip stays behind to own the selection; it must not hold tmux's pipes.
+exec xclip -selection clipboard >/dev/null 2>&1
